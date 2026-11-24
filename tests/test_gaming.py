@@ -58,8 +58,10 @@ def test_a_table_of_answers_does_not_fit_in_the_constants(model, ver):
 
 def test_the_verifier_draws_its_own_seed_so_no_estimator_can_be_fitted_to_its_draws(model, ver):
     e = model.monte_carlo(ver.weights, 32)
-    a, b = ver.score(e, runs=64), ver.score(e, runs=64)
-    assert a["seed"] != b["seed"] and a["parts"]["estimate_mean"] != b["parts"]["estimate_mean"]
+    a, b = ver.score(e, runs=64, keep_runs=True), ver.score(e, runs=64, keep_runs=True)
+    # run by run the two scorings drew other inputs (their means alone tie about one time in twenty: 2,048 inputs
+    # at 98.5% right)
+    assert a["seed"] != b["seed"] and not np.array_equal(a["runs_data"]["estimates"], b["runs_data"]["estimates"])
     # and the reference inputs come from a seed no scoring uses: its own, fixed in the config, never shown
     assert ver.reference()["seed"] not in (a["seed"], b["seed"])
 
