@@ -1,32 +1,29 @@
-"""Make the networks of the RNN models rnn-a to rnn-g from ARC's AlgZoo. Withheld from the agent, like everything here.
+"""Make the networks of the RNN models rnn-b and rnn-g from ARC's AlgZoo. Withheld from the agent, like everything here.
 
     python withheld/rnn/convert.py              writes the networks that are missing, checks the others
     python withheld/rnn/convert.py --from DIR   the same from another copy of the files
+
+Taken from Mech-Interp-Agent-level1 (withheld/rnn/convert.py), which made the same files under other names:
+rnn-g-s0 here is its rnn-g-s0, rnn-g-z<seed> its rnn-c-s<seed>, and rnn-b-s<seed> its rnn-b-s<seed>.
 
 AlgZoo (github.com/alignment-research-center/alg-zoo, commit 4433f50, licence MIT-0) trains tiny networks on
 algorithmic tasks and publishes them uninterpreted. Its 2nd argmax family is one-layer ReLU RNNs without biases
 (alg_zoo/architectures.py, DistRNN), trained to output the position of the second-largest of n numbers, each
 drawn from the standard normal distribution (alg_zoo/tasks.py, task_2nd_argmax: x.argsort(-1)[..., -2]).
-pth/ holds the state-dict files of its public folder gs://arc-ml-public/alg/zoo for three of its sizes, named
+pth/ holds the state-dict files of its public folder gs://arc-ml-public/alg/zoo for two of its sizes, named
 2nd_argmax_<hidden>_<n>_<training sequences>_<seed>.pth, as fetched on 12 November 2026 by
 
-    for c in 2_2 4_3 16_10; do for n in 1073741824 0; do for s in 0 1 2 3 4; do
-      curl -sfO "https://storage.googleapis.com/arc-ml-public/alg/zoo/2nd_argmax_${c}_${n}_${s}.pth"; done; done; done
+    for c in 4_3 16_10; do for s in 0 1 2 3 4; do
+      curl -sfO "https://storage.googleapis.com/arc-ml-public/alg/zoo/2nd_argmax_${c}_1073741824_${s}.pth"; done; done
 
-The files are pickles. They are read without torch, by an unpickler that accepts an ordered dict and plain
-tensors over storages and refuses anything else, so nothing in them is ever run. Each model gets the five
-seeds, under the level-1 names input (rnn.weight_ih_l0), recurrent (rnn.weight_hh_l0) and readout
-(linear.weight), float32 as published. The fully trained ones (2^30 training sequences) make rnn-a, rnn-b and
-rnn-c; the same seeds before any training (0 sequences: AlgZoo saves the model as it starts) make their
-baseline models rnn-d, rnn-e and rnn-f.
-
-rnn-g is not five seeds of one size. Its first network is the 16-unit network AlgZoo's write-up analyses and sets as
-its challenge, published outside the zoo folder (alg_zoo/loading.py, example_2nd_argmax) and fetched on 17 November
-2026 by
+and the 16-unit network AlgZoo's write-up analyses and sets as its challenge, published outside the zoo folder
+(alg_zoo/loading.py, example_2nd_argmax) and fetched on 17 November 2026 by
 
     curl -fO "https://storage.googleapis.com/arc-ml-public/alg/one_layer_16_hidden_94_acc_2nd_argmax.pth"
 
-Its second is the zoo's own pick of that size, rnn-c-s2's file, for the seed check (FILES).
+The files are pickles. They are read without torch, by an unpickler that accepts an ordered dict and plain
+tensors over storages and refuses anything else, so nothing in them is ever run. Each network gets the names
+input (rnn.weight_ih_l0), recurrent (rnn.weight_hh_l0) and readout (linear.weight), float32 as published.
 
 A network's file is written once. When it exists, its weights are compared with the conversion and left as they
 are: models/<name>/config.yaml holds its sha256, and the tests convert again and compare.
@@ -46,14 +43,12 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 PTH = HERE / "pth"
-TRAINED, UNTRAINED = 2**30, 0
-MODELS = {  # level-1 name: (hidden units, numbers per input, training sequences)
-    "rnn-a": (2, 2, TRAINED), "rnn-b": (4, 3, TRAINED), "rnn-c": (16, 10, TRAINED),
-    "rnn-d": (2, 2, UNTRAINED), "rnn-e": (4, 3, UNTRAINED), "rnn-f": (16, 10, UNTRAINED),
-    "rnn-g": (16, 10, TRAINED),
+SIZES = {"rnn-b": (4, 3), "rnn-g": (16, 10)}  # hidden units, numbers per input
+NETWORKS = {  # model: [(network id, the file it is converted from)]
+    "rnn-b": [(f"rnn-b-s{s}", f"2nd_argmax_4_3_1073741824_{s}.pth") for s in range(5)],
+    "rnn-g": [("rnn-g-s0", "one_layer_16_hidden_94_acc_2nd_argmax.pth")]
+             + [(f"rnn-g-z{s}", f"2nd_argmax_16_10_1073741824_{s}.pth") for s in range(5)],
 }
-SEEDS = range(5)
-FILES = {"rnn-g": ["one_layer_16_hidden_94_acc_2nd_argmax.pth", "2nd_argmax_16_10_1073741824_2.pth"]}  # a model of named files
 NAMES = {"rnn.weight_ih_l0": "input", "rnn.weight_hh_l0": "recurrent", "linear.weight": "readout"}
 DTYPES = {"FloatStorage": np.float32, "DoubleStorage": np.float64, "HalfStorage": np.float16, "LongStorage": np.int64,
           "IntStorage": np.int32}
@@ -108,26 +103,14 @@ def load_state_dict(path) -> dict:
     return {k: v.astype(v.dtype.newbyteorder("=")) for k, v in out.items()}
 
 
-def numbers(name: str) -> list:
-    """The numbers of a model's networks: the five seeds, or one per file for a model of named files."""
-    return list(range(len(FILES[name]))) if name in FILES else list(SEEDS)
-
-
-def source(name: str, seed: int, folder: Path = PTH) -> Path:
-    if name in FILES:
-        return Path(folder) / FILES[name][seed]
-    d, n, sequences = MODELS[name]
-    return Path(folder) / f"2nd_argmax_{d}_{n}_{sequences}_{seed}.pth"
-
-
 def sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def convert(name: str, seed: int, folder: Path = PTH) -> dict:
-    """The network's weights under the level-1 names, as they are stored."""
-    d, n, _ = MODELS[name]
-    path = source(name, seed, folder)
+def convert(name: str, network_id: str, folder: Path = PTH) -> dict:
+    """The network's weights under their names here, as they are stored."""
+    d, n = SIZES[name]
+    path = Path(folder) / dict(NETWORKS[name])[network_id]
     sd = load_state_dict(path)
     if set(sd) != set(NAMES):
         raise ValueError(f"{path.name}: unexpected tensors {sorted(sd)}")
@@ -142,12 +125,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--from", dest="folder", default=str(PTH), help="the folder holding the .pth files (default: pth/ here)")
     args = ap.parse_args(argv)
-    for name in MODELS:
+    for name, networks in NETWORKS.items():
         zoo = REPO / "models" / name / "zoo"
         zoo.mkdir(parents=True, exist_ok=True)
-        for seed in numbers(name):
-            w = convert(name, seed, Path(args.folder))
-            out = zoo / f"{name}-s{seed}.npz"
+        for network_id, file in networks:
+            w = convert(name, network_id, Path(args.folder))
+            out = zoo / f"{network_id}.npz"
             if out.exists():
                 with np.load(out, allow_pickle=False) as z:
                     same = set(z.files) == set(w) and all(z[k].dtype == w[k].dtype and np.array_equal(z[k], w[k]) for k in w)
@@ -157,8 +140,7 @@ def main(argv=None):
             else:
                 np.savez(out, **w)
                 what = "written"
-            print(f"{out.relative_to(REPO)} {what}  sha256 {sha256(out)}  from {source(name, seed, Path(args.folder)).name} "
-                  f"sha256 {sha256(source(name, seed, Path(args.folder)))}")
+            print(f"{out.relative_to(REPO)} {what}  sha256 {sha256(out)}  from {file} sha256 {sha256(Path(args.folder) / file)}")
 
 
 if __name__ == "__main__":

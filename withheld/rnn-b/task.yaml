@@ -1,0 +1,35 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach.
+networks: >
+  rnn-b-s0 to rnn-b-s4 are ARC's AlgZoo networks of hidden size 4 on three numbers (2nd argmax), seeds 0 to 4 of
+  one recipe; s0 is the zoo's own pick. A small model, for smoke runs and the tests.
+provenance:
+  source: ARC's AlgZoo, github.com/alignment-research-center/alg-zoo (commit 4433f50, licence MIT-0)
+  files: withheld/rnn/pth/2nd_argmax_4_3_1073741824_<seed>.pth, from gs://arc-ml-public/alg/zoo, fetched on 12 November 2026
+  converted_by: withheld/rnn/convert.py; the same files as Mech-Interp-Agent-level1's rnn-b, byte for byte
+# The verifier's own measurement: 2,097,152 inputs drawn with seed 20261124, 32,768 at a time.
+accuracy:
+  rnn-b-s0: 0.984562   # 2064776 of 2097152
+  rnn-b-s1: 0.892789   # 1872315
+  rnn-b-s2: 0.759279   # 1592323
+  rnn-b-s3: 0.904451   # 1896772
+  rnn-b-s4: 0.944846   # 1981485
+roles: s0 for the rounds; s1 to s4 held out
+hygiene:
+  - AlgZoo
+  - alg-zoo
+  - alg_zoo
+  - alignment.org
+  - Alignment Research
+  - arc-ml
+  - 98.5%
+  - "0.9846"
+  - "0.985"
+  - 89.3%
+  - "0.893"
+  - 75.9%
+  - "0.759"
+  - 90.4%
+  - "0.904"
+  - 94.5%
+  - "0.945"

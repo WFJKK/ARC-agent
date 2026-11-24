@@ -8,4 +8,5 @@ dependencies = ["numpy", "pyyaml", "psutil"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q"
+addopts = "-q -m 'not slow'"
+markers = ["slow: minutes long; run with -m slow"]

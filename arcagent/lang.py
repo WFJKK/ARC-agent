@@ -59,6 +59,7 @@ PRICES = "arc-prices-v1"
 MAX_NODES = 2000  # absolute ceilings; a run's own limits are lower (config: entry.max_nodes, entry.max_const_scalars)
 MAX_CONST_SCALARS = 1_000_000
 MAX_ELEMENTS = 4_000_000  # entries of any one value
+MAX_WORK = 2**28  # multiply-adds of any one matrix product
 MAX_HELD = 64_000_000  # entries of all the values held at once (what is kept between runs, and one run's own)
 MAX_RANK = 6
 MAX_STREAM = 2**62
@@ -236,7 +237,8 @@ def apply(node: dict, args: list, weights: dict, rng=None, svd_store: dict | Non
         lead = np.broadcast_shapes(x.shape[:-2] if x.ndim > 1 else (), y.shape[:-2] if y.ndim > 1 else ())
         size = int(np.prod(lead, dtype=np.int64)) * (x.shape[-2] if x.ndim > 1 else 1) * (y.shape[-1] if y.ndim > 1 else 1)
         _guard(size)
-        _guard(size * max(k, 1))
+        if size * max(k, 1) > MAX_WORK:
+            raise EntryError(f"matmul: {size * k} multiply-adds are above the limit of {MAX_WORK} for one product")
         if x.dtype == np.bool_ or y.dtype == np.bool_:
             x, y = x.astype(np.int64), y.astype(np.int64)
         return _norm(np.matmul(x, y)), size * k

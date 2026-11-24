@@ -1,0 +1,57 @@
+# The model rnn-g: a recurrent network with one layer of 16 units, a ReLU and no biases, reading ten real
+# numbers; 432 weights. Its networks are published ones (withheld/rnn/convert.py) and noised copies of the
+# first (withheld/rnn-g/noise.py).
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Which network is which and how often each gives the task's answer is not in this folder: it is in
+# withheld/rnn-g/, which no tool of the agent reaches. The agent is given model.py, task.py and the sentences
+# under `says`, and the weights of the network of its run.
+name: rnn-g
+sizes:
+  n_ctx: 10      # numbers per input
+  d_hidden: 16   # units of the recurrent layer
+input_space: [real, real, real, real, real, real, real, real, real, real]   # per position: a real number
+n_outputs: 10
+data_set:
+  kind: normal          # every number drawn on its own from the standard normal distribution
+  says: >
+    An input is ten real numbers, x_0 to x_9, each drawn on its own from the standard normal distribution
+    (mean 0, standard deviation 1). The data set is every input that can be drawn this way, each weighted by
+    how likely it is to be drawn.
+task:
+  says: >
+    The task's answer for an input is the position of its second-largest number: the i for which exactly one
+    of the ten numbers is larger than x_i. The network gives the task's answer on most inputs, not on all.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  input: [16, 1]
+  recurrent: [16, 16]
+  readout: [10, 16]
+# s0 is the run's network. The others are the held-out networks of the report: z0 to z4 of the same design and
+# sizes, trained by one recipe with five seeds; n1 to n3 are s0 with noise added to its weights.
+networks:
+  - id: rnn-g-s0
+    weights: zoo/rnn-g-s0.npz
+    sha256: 93ec78ef68b5ca1af97fcea09195e672011d451502db6f18456d6812f4a1bc8c
+  - id: rnn-g-z0
+    weights: zoo/rnn-g-z0.npz
+    sha256: 352293974dccb4c90ea406c789532477a963a0deec5cded6f59d78344a8dfc08
+  - id: rnn-g-z1
+    weights: zoo/rnn-g-z1.npz
+    sha256: 6f289710fc468390910c452c1fcdfb72f801fd85905f0ff3f5a05eb3188ea31f
+  - id: rnn-g-z2
+    weights: zoo/rnn-g-z2.npz
+    sha256: bd41ad4fe3a0c949f02dfe924b8f40c497f8e7dd44074d635b0d69b81744cc35
+  - id: rnn-g-z3
+    weights: zoo/rnn-g-z3.npz
+    sha256: b8f1ad11977a5b0fc48594977d38839283ba3ff432fdcf6008062b70794ede42
+  - id: rnn-g-z4
+    weights: zoo/rnn-g-z4.npz
+    sha256: 441e1c508dfcefbec107ce84cf8ffbde856e736e52f3a6489fda578245b4ac05
+  - id: rnn-g-n1
+    weights: zoo/rnn-g-n1.npz
+    sha256: 0eedbe0ebe351e41c9460054a598466e2074f7fced8903a83fb6a3a90f16f6f2
+  - id: rnn-g-n2
+    weights: zoo/rnn-g-n2.npz
+    sha256: 18de7b9196ffa2bc892955799ddedc8136573f6de699f68f2ed5f936e3809af0
+  - id: rnn-g-n3
+    weights: zoo/rnn-g-n3.npz
+    sha256: 623b9bc6293fc4238324d20a26bcb6eff9ab45a8146b650180e3ab00652d78de
