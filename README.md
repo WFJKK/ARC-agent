@@ -152,8 +152,8 @@ Measured under each pilot's settings (`python -m arcagent.report --config config
 | Network | Share, size | Copies' accuracy: mean, sd (points) | Its own accuracy, written in | The best number in hindsight | Best plain sampling (inputs) | Computed from the weights |
 | --- | --- | --- | ---: | ---: | ---: | --- |
 | lin-a-s0 | 1%, 1.19 | 0.928, 4.4 | -7.14e-03 | -1.92e-03 | -5.11e-04 (255) | -3.35e-04 sampling from a table; -4.85e-04 every input, exact; -3.03e-04 permutations from the table; -2.14e-04 every input with the rows that can win; -1.80e-04 the same with one fitted factor |
-| att-a-s0 | 1%, 2.38 | 0.948, 8.4 | -9.86e-03 | -7.10e-03 | -4.21e-04 (206) | -2.39e-04 every input, exact |
-| rnn-a-s2 | 40%, 0.5 | 0.949, 7.9 | -8.80e-03 | -6.20e-03 | -4.70e-04 (179) | -7.60e-05 exact |
+| att-a-s0 | 1%, 2.38 | 0.948, 8.4 | -9.86e-03 | -7.10e-03 | -4.21e-04 (206) | -3.06e-04 every one-token input, two tokens sampled; -2.39e-04 every input, exact; -2.01e-04 the same from shared tables; -9.72e-05 the outputs that can win |
+| rnn-a-s2 | 40%, 0.5 | 0.949, 7.9 | -8.80e-03 | -6.20e-03 | -4.70e-04 (179) | -1.19e-04 the network on 64 directions; -7.60e-05 exact; -3.40e-05 exact, no forward pass |
 | rnn-b-s0 | 12.5%, 0.0398 | 0.930, 4.5 | -4.96e-03 | -2.00e-03 | -5.41e-04 (235) | none written yet |
 | rnn-g-s0 | 1%, 0.0398 | 0.917, 5.8 | -4.58e-03 | -3.30e-03 | -5.43e-04 (267) | none written yet |
 
@@ -171,10 +171,15 @@ Measured under each pilot's settings (`python -m arcagent.report --config config
   fitted on copies made in a sandbox, at 164 forward passes and a little over a third of plain sampling's loss.
   That last factor is a number from brute force again, but on top of a count that follows the weights: alone it
   would be the constant that loses. For att-a, tables over single tokens give every input's logits exactly at 239
-  forward passes, a little over half of plain sampling's loss. rnn-a has no biases, so its output depends on the
-  input's direction only, and along the sides of a square its logits are linear between the points where a unit
-  switches: the accuracy to 2e-5 on every copy at 75 forward passes, a sixth of plain sampling's loss. None of
-  them was written by an agent.
+  forward passes, a little over half of plain sampling's loss, and at 200 once the two slots share their tables
+  (a slot's vector is the embedding plus one row for the position). On two tokens the output is nearly always one
+  of the 2 highest outputs of either token's table: counting against those alone costs 97 forward passes, is never
+  below the accuracy and under a tenth of a point above it, under a quarter of plain sampling's loss. rnn-a has
+  no biases, so its output depends on the input's direction only: the network on 64 directions is already within
+  0.7 points. Along a line of inputs its logits are linear between the points where a unit switches: running the
+  network at those points gives the accuracy to 2e-5 on every copy at 75 forward passes, and working the same
+  stretches out by hand on the two lines (1, t) and (-1, t), with no forward pass, at 34, a fourteenth of plain
+  sampling's loss. None of them was written by an agent, and none holds a measured number but lin-a's last.
 - **Tables do not get there.** The next thing brute force can try is to carry the network's weights into the
   estimator as constants, see how a copy differs, and predict its accuracy from a table made beforehand of what
   each weight does. For rnn-b's 32 weights that is 97 numbers, well within the limit of 256, and it loses to plain

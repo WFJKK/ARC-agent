@@ -1,7 +1,7 @@
 """Reference estimators for rnn-a, for reports and tests. Withheld from the agent: no tool reaches this folder.
 
 Each function takes a graph g, the estimator language lang, and the model's and the task's modules, and returns the
-estimate as an expression.
+estimate as an expression. They are in the order they were found.
 
 Two facts about the network make its accuracy a short computation.
 
@@ -80,6 +80,65 @@ def regions(g, lang, model, task):
     return total / (2.0 * math.pi)
 
 
+def directions(k):
+    """The first fact alone: the network on k directions, evenly spaced on the circle and written in as constants
+    (they are the same for every network). k is a multiple of 8 and the directions lie half a step off the line
+    x_0 = x_1, so the task's own change of answer falls between two of them. What is left is where the network's
+    output changes: each such place is known to a step of the circle only."""
+    def build(g, lang, model, task):
+        step = 2.0 * math.pi / k
+        x = g.const([[math.cos((j + 0.5) * step), math.sin((j + 0.5) * step)] for j in range(k)])
+        return (model.forward(g, lang, x) == task.answer(g, lang, x)).mean()
+    return build
+
+
+def _atan_all(lang, t):
+    """atan(t) for every real t: the polynomial on [-1, 1], and atan(t) = +-pi/2 - atan(1 / t) outside."""
+    big = abs(t) > 1.0
+    a = _atan(lang.where(big, 1.0 / lang.where(big, t, 1.0), t))
+    return lang.where(big, lang.where(t > 0.0, math.pi / 2, -math.pi / 2) - a, a)
+
+
+def two_lines(g, lang, model, task):
+    """The same accuracy without running the network. The two lines of inputs (1, t) and (-1, t), t any real
+    number, meet every direction once (but straight up and down), and on each the logits are worked out by hand:
+
+        after the first number the state is relu(w) on the line (1, t) and relu(-w) on (-1, t); call rec times it u
+        after the second, unit i is on where w_i t + u_i > 0: it switches at t = -u_i / w_i
+        the output is 0 where r . h >= 0, r = readout[0] - readout[1]: between two switches that is
+        alpha t + beta >= 0, alpha and beta the sums of r_i w_i and r_i u_i over the units that are on
+
+    The task's answer is 0 where t is above the line's first number. So each line falls into four stretches (two
+    switches and the change of answer), on each the output agrees with the answer on one side of -beta / alpha, and
+    the share of the circle is the difference of two arctangents. No forward pass: about a third of the cost of
+    finding the same stretches by running the network at their ends."""
+    w, rec, readout = g.weight("input")[:, 0], g.weight("recurrent"), g.weight("readout")
+    r = readout[0] - readout[1]
+    far = 1e9                                                            # stands for a line's two ends
+    u = lang.stack([rec @ lang.maximum(w, 0.0), rec @ lang.maximum(-w, 0.0)], axis=0)       # (lines, units)
+    still = (w == 0.0)[None, :]                                          # a unit the second number does not reach
+    switch = lang.where(still, far, -u / lang.where(still, 1.0, w[None, :]))
+    first = g.const([[1.0], [-1.0]])                                     # the first number on each line
+    ends = g.const([[far], [far]])
+    cuts = lang.minimum(lang.maximum(lang.sort(lang.concat([switch, first], axis=1), axis=1), -far), far)
+    lo, hi = lang.concat([-ends, cuts], axis=1), lang.concat([cuts, ends], axis=1)           # (lines, stretches)
+    inside = lang.concat([cuts[:, :1] - 1.0, (cuts[:, :-1] + cuts[:, 1:]) * 0.5, cuts[:, -1:] + 1.0], axis=1)
+    on = (inside[:, :, None] * w[None, None, :] + u[:, None, :]) > 0.0   # (lines, stretches, units)
+    alpha = lang.where(on, (r * w)[None, None, :], 0.0).sum(axis=2)
+    beta = lang.where(on, (r[None, :] * u)[:, None, :], 0.0).sum(axis=2)
+    zero = inside > first                                                # the answer on the stretch is 0
+    slope = lang.where(zero, alpha, -alpha)                              # agreeing: slope t + (+-beta) >= 0
+    flat = alpha == 0.0
+    turn = -beta / lang.where(flat, 1.0, alpha)
+    p = lang.where(slope > 0.0, lang.maximum(lo, turn), lo)
+    q = lang.where(slope < 0.0, lang.minimum(hi, turn), hi)
+    # a stretch with no slope (no unit on, for one: both logits 0, the output 0) agrees everywhere or nowhere
+    q = lang.where(flat & ((beta >= 0.0) != zero), p, q)
+    return lang.maximum(_atan_all(lang, q) - _atan_all(lang, p), 0.0).sum() / (2.0 * math.pi)
+
+
 ESTIMATORS = {
+    "the network on 64 directions": directions(64),
     "the regions on which the logits are linear, exactly": regions,
+    "the regions worked out on two lines, no forward pass": two_lines,
 }
