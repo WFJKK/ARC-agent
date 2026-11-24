@@ -252,8 +252,9 @@ def test_on_copies_the_number_read_off_the_network_loses_and_a_sampler_is_locked
     A = loop.cached_references(path)["rnn-b-s0"]["accuracy"]
     assert [s["name"] for s in (pasted, s64, s256)] == ["pasted", "sampling_64", "sampling_256"]
     assert pasted["parts"]["estimate_mean"] == pytest.approx(A, abs=0.01) and pasted["parts"]["cost"] == 0  # its own 8,192 inputs
-    # the number is far behind: behind the small sampler, and at more than four times the loss of the larger one
-    assert pasted["reward"] < s64["reward"] < s256["reward"] < 0 and pasted["reward"] < 4 * s256["reward"]
+    # the number is far behind: behind both samplers, and at more than three times the loss of the best plain
+    # sampling on the very copies it was scored on
+    assert pasted["reward"] < s64["reward"] < s256["reward"] < 0 and pasted["reward"] < 3 * pasted["benchmark"]["best_reward"]
     assert pasted["parts"]["tracking"] is None and s64["parts"]["tracking"] > 0.8
     assert pasted["benchmark"]["constant_unchanged"] == pytest.approx(pasted["reward"], rel=0.25)
     assert [rd["improved"] for rd in (r1, r2)] == [True, True]

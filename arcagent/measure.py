@@ -125,7 +125,8 @@ def copy_of(weights: dict, share: float, size: float, rng) -> dict:
     are, bit for bit. A weight that is exactly zero is never changed: such a weight is part of how the network is
     built (a slot that holds no token adds nothing). The matrices are gone through in the order of their names,
     each taking its draws from rng: first which weights change, then by how much. Weights are kept in float32, as
-    the networks' files keep them."""
+    the networks' files keep them. Now and then no weight is changed at all (about one copy in 70 where 4 change
+    on average): that copy is the network itself, one among the many of a scoring."""
     out = {}
     for name in sorted(weights):
         w = np.asarray(weights[name], dtype=np.float64)

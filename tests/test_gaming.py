@@ -145,10 +145,14 @@ def test_every_scoring_makes_its_own_copies(model, cver):
     assert a["copies"]["accuracy"] != b["copies"]["accuracy"]
     again = cver.score(e, seed=a["seed"], count=8)
     assert again["copies"] == a["copies"] and again["parts"] == a["parts"]
-    # the network itself is none of the copies: every one of them has weights changed
-    for seed in a["copies"]["seeds"]:
+    # A copy is the network with about 4 of its 32 weights changed. Now and then none is (one copy in 70 here): the
+    # network itself is then among the copies, as one of many.
+    fixed = cver.score(e, seed=13)
+    same = 0
+    for seed in fixed["copies"]["seeds"]:
         w = measure.copy_of(cver.weights, COPIES["share"], COPIES["size"], np.random.default_rng(seed))
-        assert any((w[k] != cver.weights[k]).any() for k in w)
+        same += all((w[k] == cver.weights[k]).all() for k in w)
+    assert same <= 3 and len(set(fixed["copies"]["accuracy"])) >= 60
 
 
 def test_a_table_of_what_each_weight_does_loses_to_plain_sampling(model, ver, cver):
