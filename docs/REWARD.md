@@ -4,6 +4,10 @@ The verifier measures an estimator; a reward function turns what it measured int
 fixed. The reward is meant to be changed: it is a function in `arcagent/rewards.py`, picked by the run config, and
 every receipt keeps the parts, so a finished run can be scored again.
 
+A scoring is made on copies of the run's network, not on the network itself (section 5 says why and how). Sections
+1 to 3 are written for one network; on copies, A is the accuracy of the copy a run was on, and every mean is over
+all runs on all copies.
+
 ## 1. The parts
 
 With A the network's accuracy as the verifier measures it, K runs of the estimator, run k giving the estimate
@@ -21,7 +25,13 @@ A_k and spending O_k operations, and F the operations of one forward pass:
 | random | whether the estimate depends on a draw at all |
 
 mse is bias^2 + estimate_std^2. A receipt also keeps the seed, the number of runs, the reference measurement
-(inputs, seed, standard error) and the benchmark (section 4).
+(inputs, seed, standard error) and the benchmark (section 3).
+
+On copies there are more parts: `copies` and `runs_per_copy`; `accuracy` and `accuracy_std`, the mean and the
+standard deviation of the copies' accuracies; `estimate_std`, the spread of the estimates within a copy (the mean
+of the copies' own standard deviations), and `estimate_between`, the standard deviation of the copies' mean
+estimates; and `tracking`, the correlation between a copy's mean estimate and its accuracy (none for an estimator
+that gives every copy the same number). The receipt keeps every copy's accuracy, mean estimate and seed.
 
 **A is itself measured.** On 2,097,152 inputs its standard error is about 0.015 points for a network near 95%, so an
 estimator's squared error has a floor of about 2e-8 from the reference alone. That is 0.02 forward passes at lambda =
@@ -56,6 +66,10 @@ and its mse is A (1 - A) / n. The receipt gives that mse and rms error, the shar
 lower (`mse_reduction`: 59.9% in the worked example), and the best plain sampling under the reward (n* and
 reward*). Below one sample (C < s) sampling has nothing to say and these are empty.
 
+On copies, A (1 - A) is its mean over the copies, and the benchmark has two more numbers: `constant_best`, what
+the best number written into an estimator could score on these copies (minus the variance of their accuracies),
+and `constant_unchanged`, what the network's own accuracy scores there.
+
 ## 4. Ways to game the reward, and what stops each
 
 Each has a test in `tests/test_gaming.py`, unless another test is named or it holds by construction. A hole found
@@ -71,28 +85,48 @@ later gets its test there first.
 | Paste a table of answers | the limit of 256 numbers in constants |
 | An estimate that is not a number on rare runs | refused, with the run and its seed |
 | Send one estimator again and again and keep the luckiest scoring | the lock is scored once more with a fresh seed, and the report gives that number |
-| Read the accuracy from the receipts | the agent sees no accuracy, bias or benchmark; the reward and the mse still say how far off it is, which a reward on one network cannot avoid |
+| Read the accuracy from the receipts | the agent sees no accuracy, bias or benchmark. On one network the reward and the mse still say how far off a number is; on copies they say it of copies that are never used again |
+| Measure the accuracy beforehand and write it in | scoring on copies: the number is 8 to 23 times worse than the best plain sampling there (section 5) |
+| Learn a scoring's copies from what it reports, and answer for them next time | every scoring makes its own copies from a seed the verifier draws afresh |
+| Carry the network's weights in as constants and look up, in a table made beforehand, what each changed weight does | nothing forbids it, and it loses to plain sampling: the changes of several weights do not add up (97 numbers for rnn-b's 32 weights; 1.1 to 3.5 times sampling's loss over five seeds) |
 
-## 5. What the reward does not see
+## 5. Scoring on copies: what the cost term cannot see, and what stops it
 
-**The constant.** The reward scores only the estimate and its cost on the one network of the run. The agent's code
-may run the network as often as it likes while exploring, so the accuracy measured in the sandbox and written in as
-a constant scores near the top. On the challenge network the constant 0.95, read off nothing, scores -9.5e-6, far
-above any sampling. This is not a hole in the measuring but the reward's definition, and the pipeline keeps it as
-the default because it is the quantity the write-up asks about. What the pipeline adds instead:
+**The number.** The cost term makes brute force inside an estimator expensive. It cannot see brute force done
+beforehand: the agent's code may run the network as often as it likes while exploring, and the accuracy it
+measures there fits into an estimator as one constant, at no operations. Scored on the network itself that
+constant is the best estimator there is (on the challenge network even 0.95, read off nothing, scores -9.5e-6, far
+above any sampling), and no estimate can reach it.
+`tests/test_gaming.py::test_the_known_limit_a_constant_read_off_the_network` records it.
 
-- the agent is told that the locked estimator is run on other networks, where a constant stays what it was;
-- the held-out check and the per-submission held-out scores (`heldout_scores.jsonl`) measure it on networks of the
-  same design: five trained from other starts and three noised copies of the challenge network, with accuracies
-  from 69% to 95%;
-- the report sets every held-out result next to what the run's own accuracy, as a constant, would score there.
+**Copies.** So a scoring is made on copies of the network (`arcagent/measure.py`): each weight changed with
+probability `share`, by a normal draw of `size` times the root mean square of its matrix; zeros stay zero. Every
+scoring makes `count` copies of its own from its seed, measures each copy's accuracy, runs the estimator `runs`
+times on each, and takes a run's error against the copy it ran on. What is computed from the weights follows the
+copy; a number does not, and its mean squared error is at least the variance of the copies' accuracies.
 
-`tests/test_gaming.py::test_the_known_limit_a_constant_read_off_the_network` records it: the pasted accuracy beats
-sampling on the run's network and loses to it on another.
+**How much the copies differ** is therefore the one thing to choose, per network (`python -m arcagent.calibrate`):
+
+- share: 1% of the weights, and at least 4 of them on average;
+- size: the smallest at which the variance of the copies' accuracies is 4 times what the best plain sampling loses,
+  2 sqrt(lambda s v), v the copies' mean A (1 - A). It must hold at the next size of the grid too.
+
+A few weights changed by much, not all of them by little: with noise on every weight a wide network averages it
+out, a copy's accuracy is nearly a function of the noise level alone, and a number (or a table of numbers by
+noise level) would do again. The record of each calibration is in `withheld/<model>/copies.yaml`.
+
+**What it costs.** The copies are not the network: their accuracies are lower and differ, and an estimator that
+leans on one detail of the one network may fail where that detail was changed. The report gives the locked
+estimator on the network itself as well, and `verifier.copies.count: 0` scores a whole run there.
 
 **Sampling.** An estimator that samples well scores well. Variance reduction (stratifying, control variates,
-importance sampling) is rewarded like understanding is. Telling the two apart is left to reading the estimators
-and to the held-out check, where a mechanism that holds keeps working and a tuned sampler mostly does too.
+importance sampling) is rewarded like understanding is. Telling the two apart is left to reading the estimators.
+What copies add is that there is something above sampling to reach for: the reference estimators of lin-a, att-a
+and rnn-a compute the accuracy from the weights and lose a third less, a little over half, and a sixth of what the
+best plain sampling loses (README, "Scored on copies of the network").
+
+**Held-out networks** are other networks of the same design, scored as they are. They stay in the report, where
+they say whether the locked estimator works beyond the run's network at all.
 
 ## 6. Changing the reward
 
@@ -109,3 +143,5 @@ and to the held-out check, where a mechanism that holds keeps working and a tune
 - **A reward on the held-out networks**: the held-out scores of every submission are on record, so a reward that
   averages over networks can be tried on a finished run first (`heldout_scores.jsonl`). To steer by it, the
   verifier would score each submission on those networks and the agent would be scored on networks it cannot see.
+- **How the copies are made** is not the reward but the measuring: `verifier.copies` in the run config. Runs made
+  with different shares or sizes cannot be compared with each other.

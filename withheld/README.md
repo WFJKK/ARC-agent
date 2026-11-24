@@ -27,5 +27,10 @@ recipes and curves, where a network differs from the task, how often it gives ea
 - `rnn/`: AlgZoo's original files and the converter that reads them without running them; rnn-a, rnn-d, rnn-e and
   rnn-f come from the same folder (the untrained ones are AlgZoo's saved starting states).
 - `<model>/task.yaml`: the record, with the strings the hygiene check looks for.
-- `<model>/references.py`: reference estimators for the report.
+- `<model>/copies.yaml`: what `python -m arcagent.calibrate` measured when it chose how the run network's copies
+  are made (the share and the size themselves are in the pilot config, and the agent is told them): how often
+  copies give the task's answer, size by size.
+- `<model>/references.py`: reference estimators for the report. Those of lin-a, att-a and rnn-a compute the
+  accuracy from the weights, each from how its network works; they are what an agent is hoped to find, which is
+  why they are here.
 - `rnn-g/noise.py`: how the noised networks were made.

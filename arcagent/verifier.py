@@ -1,6 +1,7 @@
 """The verifier: measures an estimator's error and its compute on one network.
 
     python -m arcagent.verifier --model models/rnn-g --network rnn-g-s0 --estimator e.json [--runs 4096] [--lam 1e-6]
+    python -m arcagent.verifier --config config/pilot/rnn-g.yaml --estimator e.json     as that pilot scores: on copies
 
 It reads an estimator as JSON data and interprets it (lang.py); nothing of an estimator is ever executed as code.
 It measures in three steps:
@@ -228,16 +229,25 @@ def describe(receipt: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", required=True)
-    ap.add_argument("--network", required=True)
+    ap.add_argument("--model", help="a model folder (or --config)")
+    ap.add_argument("--network", help="one of its networks (default with --config: the run's)")
+    ap.add_argument("--config", help="a run config: score as its runs are scored (its reward, its copies)")
     ap.add_argument("--estimator", required=True, help="an estimator as a JSON file")
-    ap.add_argument("--runs", type=int, default=DEFAULTS["runs"])
-    ap.add_argument("--lam", type=float, default=1e-6, help="lambda of r_lambda: the price of one forward pass")
+    ap.add_argument("--runs", type=int, help="runs (on copies: on each copy); default: the config's, or 4096")
+    ap.add_argument("--lam", type=float, default=1e-6, help="without --config: lambda of r_lambda, the price of one forward pass")
     ap.add_argument("--seed", type=int, help="the scoring's seed (default: drawn afresh)")
     ap.add_argument("--reference-inputs", type=int, default=DEFAULTS["reference_inputs"])
     args = ap.parse_args(argv)
-    v = Verifier(load_model(args.model), args.network, {"reward": {"name": "r_lambda", "lam": args.lam},
-                                                       "verifier": {"reference_inputs": args.reference_inputs}})
+    if args.config:
+        from . import run_config
+
+        cfg = run_config.load(args.config)
+        v = Verifier(load_model(args.model or cfg["model"]), args.network or cfg["network"], cfg)
+    elif args.model and args.network:
+        v = Verifier(load_model(args.model), args.network, {"reward": {"name": "r_lambda", "lam": args.lam},
+                                                           "verifier": {"reference_inputs": args.reference_inputs}})
+    else:
+        ap.error("give --config, or --model and --network")
     with open(args.estimator) as f:
         receipt = v.score(json.load(f), seed=args.seed, runs=args.runs)
     print(json.dumps(receipt, indent=1))

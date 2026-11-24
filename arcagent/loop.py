@@ -17,7 +17,8 @@ A run folder (outside the repository, <runs_dir>/<run_id>):
     heldout_scores.jsonl  every scored submission also scored on the held-out networks, appended after each round;
                           nothing the agent sees reads it, and nothing is chosen by it
     locked_estimator.json the best estimator of the rounds, as submitted
-    lock.json             which submission it is, its hash, its receipt and a second scoring with a fresh seed
+    lock.json             which submission it is, its hash, its receipt, a second scoring with a fresh seed (and
+                          fresh copies) and, for a run scored on copies, one scoring on the network itself
     heldout_check.json    the locked estimator on every held-out network, with the full number of runs
     reference_scores.json the withheld reference estimators and plain sampling, scored under the run's conditions
     report.md, report.json

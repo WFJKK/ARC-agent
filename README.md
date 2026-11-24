@@ -112,21 +112,85 @@ inputs; "sampling" is plain sampling, its error from $A(1-A)/n$; $\lambda = 10^{
   whose accuracy happens to be close to 95%, and the worst by far on n2 and n3. Its mean reward over the eight
   held-out networks is -1.09e-2, against -6.2e-4 for the best plain sampling.
 
-### What the reward does not see, and what the pipeline does about it
+### Scored on copies of the network
 
-The agent's own code may run the network as much as it likes while exploring; only the estimator it submits is
-charged. So the accuracy, measured in the sandbox and written into an estimator as a constant, scores near the top
-of $R_\lambda$ on the run's network. Nothing in the reward stops that, by construction. The pipeline keeps the
-reward as it is and makes the route visible instead, as level 1 did with its seed check:
+The cost term is there so that brute force does not pay: an estimator that samples a million inputs is charged a
+million forward passes. But $C$ counts the operations of the estimator that is submitted, and nothing the agent ran
+before. Its own code may run the network as often as it likes, and what that finds fits into an estimator as one
+number, at no operations. So on the one network the agent holds, the best "estimator" is the measured accuracy
+written in as a constant: on rnn-b-s0, rounded to four places, it scores -2e-9, and nothing that estimates can
+come near it. The reward would have a summit with no hill.
 
-- **Held-out networks.** When the rounds end, the locked estimator is run, unchanged, on networks of the same design
-  the agent never sees: AlgZoo's five networks of this size (z0 to z4), trained from other random starts, and three
-  copies of the challenge network with noise added to its weights (n1 to n3; 0.2%, 0.5% and 1% of each matrix's
-  RMS). What an estimator computes from the weights is computed afresh there; a constant stays what it was. Every
+A scoring is therefore not made on that network but on **copies** of it
+([`arcagent/measure.py`](arcagent/measure.py)):
+
+- **A copy** is the network with a few of its weights changed at random: every weight is changed with probability
+  `share`, by a normal draw of `size` times the root mean square of its weight matrix. The other weights stay as
+  they are, bit for bit, and a weight that is exactly zero (the slot that holds no token) is never changed.
+- **Every scoring makes its own copies**, 128 of them, from a seed the verifier draws afresh. It measures each
+  copy's accuracy (65,536 inputs, or every input where the data set has no more), runs the estimator 32 times on
+  each copy, and takes a run's error against the accuracy of the copy it ran on. The reward is the same formula
+  over all 4,096 runs.
+- What an estimator computes from the weights follows a copy. A number written into it does not: its error is the
+  distance from the copy's accuracy, whatever the number.
+- **The agent is told all of it**: how a copy is made, with the numbers, and that it never sees the verifier's
+  copies. Its sandbox makes copies the same way (`copy(seed)`), measures them (`accuracy(w)`) and scores an
+  estimator on copies of its own exactly as the verifier would (`score_on_copies`), so it can climb without
+  spending submissions.
+
+`share` and `size` are a network's own (its pilot config), chosen by `python -m arcagent.calibrate`: 1% of the
+weights, at least 4 of them, and the smallest size at which the variance of the copies' accuracies is 4 times what
+the best plain sampling loses. The copies' accuracies then have a standard deviation of 4 to 10 points, around a
+mean 3 to 18 points below the network's own. Changing few weights by much, and not all by little, is what spreads them: with noise on
+every weight the linear and attention networks average it out, and a copy's accuracy is nearly a function of the
+noise level alone (at 16% noise on every weight, lin-a's copies have a standard deviation of 1.5 points around
+0.84), which a table could hold. Six untrained networks are right about as often as chance, copy or not, and never
+reach the rule; they take the share and size of the network they stand next to.
+
+Measured under each pilot's settings (`python -m arcagent.report --config config/pilot/<model>.yaml`, seed 0):
+
+| Network | Share, size | Copies' accuracy: mean, sd (points) | Its own accuracy, written in | The best number in hindsight | Best plain sampling (inputs) | Computed from the weights |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| lin-a-s0 | 1%, 1.19 | 0.928, 4.4 | -7.14e-03 | -1.92e-03 | -5.11e-04 (255) | -3.35e-04 sampling from a table; -4.85e-04 every input, exact |
+| att-a-s0 | 1%, 2.38 | 0.948, 8.4 | -9.86e-03 | -7.10e-03 | -4.21e-04 (206) | -2.39e-04 every input, exact |
+| rnn-a-s2 | 40%, 0.5 | 0.949, 7.9 | -8.80e-03 | -6.20e-03 | -4.70e-04 (179) | -7.60e-05 exact |
+| rnn-b-s0 | 12.5%, 0.0398 | 0.930, 4.5 | -4.96e-03 | -2.00e-03 | -5.41e-04 (235) | none written yet |
+| rnn-g-s0 | 1%, 0.0398 | 0.917, 5.8 | -4.58e-03 | -3.30e-03 | -5.43e-04 (267) | none written yet |
+
+- **The number loses.** A network's own accuracy written in is 8 to 23 times worse than the best plain sampling,
+  and the best number there could be for a scoring's copies (their mean accuracy, which nobody is told) about 4 to
+  17 times. On rnn-g-s0 the constant 0.95, which beat everything on the network itself, scores -4.37e-03.
+- **There is a hill above sampling.** The last column is three estimators written for the report
+  (`withheld/<model>/references.py`), each from how its network computes. For lin-a, the logits of an input are
+  one column per token of the matrix `unembed hidden embed`: sampling from that table costs a third of a forward
+  pass per input and loses a third less than plain sampling, and going through every pair exactly costs about
+  what plain sampling loses. For att-a, tables over single tokens give every input's logits exactly at 239
+  forward passes, a little over half of plain sampling's loss. rnn-a has no biases, so its output depends on the
+  input's direction only, and along the sides of a square its logits are linear between the points where a unit
+  switches: the accuracy to 2e-5 on every copy at 75 forward passes, a sixth of plain sampling's loss. None of
+  them was written by an agent.
+- **Tables do not get there.** The next thing brute force can try is to carry the network's weights into the
+  estimator as constants, see how a copy differs, and predict its accuracy from a table made beforehand of what
+  each weight does. For rnn-b's 32 weights that is 97 numbers, well within the limit of 256, and it loses to plain
+  sampling by 1.1 to 3.5 times over five seeds, because the changes of several weights do not add up
+  (`tests/test_gaming.py`). On the 10-weight rnn-a a fitted quadratic in all the weights' changes has an rms error
+  of 5.7 points.
+
+What a scoring on copies does not do: the copies are not the network. Their mean accuracy is a few points below
+its own, and an estimator that leans on a detail of the one network may not survive a changed weight. So every
+report also gives the locked estimator **on the network itself**, and `verifier.copies.count: 0` in a run config
+scores a whole run there, as before.
+
+### What else the pipeline does
+
+- **Held-out networks.** When the rounds end, the locked estimator is run, unchanged, on other networks of the same
+  design the agent never sees (for rnn-g: AlgZoo's five networks of this size, z0 to z4, and three copies of the
+  challenge network with noise on every weight, n1 to n3). They are scored as they are, not on copies. Every
   submission is also scored there after each round, for the record. The agent is told this happens, and that it
   does not change its reward.
-- **The report** puts every estimator next to the constant of the run's own accuracy on each held-out network, and
-  next to plain sampling at the same cost.
+- **The report** puts every estimator next to plain sampling at the same cost, says how well its estimates follow
+  the copies' accuracies (a correlation: near 1 for an estimator that computes from the weights, none for a
+  number), and gives what a number written in would have scored.
 - **Another reward** is one function away in `arcagent/rewards.py`; the parts kept with every receipt allow
   rescoring a finished run without running anything.
 
@@ -137,7 +201,7 @@ flowchart LR
     P[round prompt: network, task, data set, language, reward, earlier rounds] --> A[agent]
     A -- run_python --> S[sandbox: weights, lang, model, task, run, score_against]
     S --> A
-    A -- submit_estimator --> V[verifier: A on 2^21 inputs, 4,096 runs with fresh seeds]
+    A -- submit_estimator --> V[verifier: 128 fresh copies of the network, each one's accuracy, 32 runs on each]
     V -- reward, mse, cost, spread --> A
     A -- closing notes --> P
     V --> L[lock: best reward]
@@ -152,15 +216,16 @@ session of the Claude Code CLI with two tools and nothing else:
 
 - `run_python(code)`: Python in a sandbox, with the weights of the run's network, the estimator language `lang`,
   the network's definition `model` and the task's `task`, and the verifier's own code to run an estimator
-  (`run`). It may sample the network freely; exploring is not charged.
+  (`run`), to make and measure copies (`copy`, `accuracy`) and to score an estimator on copies of the agent's own
+  (`score_on_copies`). It may sample the network freely; exploring is not charged.
 - `submit_estimator(name)`: hands a saved estimator to the verifier and returns its reward, mean squared error,
-  cost and the mean and spread of its estimates. The agent is never shown the network's accuracy, the bias of its
-  estimates or the benchmark.
+  cost and the mean and spread of its estimates, within a copy and between copies. The agent is never shown an
+  accuracy the verifier measured, the bias of its estimates or the benchmark.
 
 The next round's prompt carries every earlier submission's result and the agent's own closing notes. The agent is
-told the task, the data set and the network, but not the network's accuracy, which network it is, or where it
-comes from (the hygiene check searches everything the agent can reach for the accuracies and the names that would
-lead to published figures, before every prompt).
+told the task, the data set, the network and how its copies are made, but not the network's accuracy, which
+network it is, or where it comes from (the hygiene check searches everything the agent can reach for the
+accuracies and the names that would lead to published figures, before every prompt).
 
 ## The models
 
@@ -213,6 +278,11 @@ No agent has run yet. The pilots are ready: `config/pilot/rnn-g.yaml` (the chall
 5 rounds) with its one-round smoke test `config/pilot/rnn-g-smoke.yaml`, and one pilot with a smoke test for every
 other model. The reference numbers above are what any run will be read against.
 
+What has run is the pipeline itself, with scripted rounds in place of an agent (`--fake tests/fake_copies`: the
+scripted agent measures its network, writes the number in, and submits it next to plain sampling), on lin-a, att-a
+and rnn-a at the pilots' settings. On all three the number came last by far, a sampler was locked, and the
+report's reference estimators stood where the table above has them.
+
 ## More implementation details
 
 ### The estimator language
@@ -236,16 +306,20 @@ Every forward pass costs what it does in level 1 (2,937 operations for the 432-w
 
 For one network (`arcagent/verifier.py`):
 
-1. $A$: the network on 2,097,152 inputs drawn with seed 20261124, 32,768 at a time (16,384 for the attention
-   networks, which say `max_batch`), through the same interpreter (`Model.accuracy`; 0.2 to 6 seconds). A data set
-   with at most that many inputs (lin-a's 4,096, att-a's and att-b's 4,160) is measured exactly instead, every
-   input weighted by how often it is drawn. Measured once per run folder (`references.jsonl`).
-2. The estimator, 4,096 times, run k with seed `[seed, k]`; `seed` drawn afresh for each scoring.
-3. The parts: mean squared error, bias, spread, mean and range of the cost, draws per run; the reward; the
-   benchmark. A scoring of a 100-pass estimator takes a few seconds.
+1. $A$ of the network itself: on 2,097,152 inputs drawn with seed 20261124, 32,768 at a time (16,384 for the
+   attention networks, which say `max_batch`), through the same interpreter (`measure.accuracy`; 0.2 to 6
+   seconds). A data set with at most that many inputs (lin-a's 4,096, att-a's and att-b's 4,160) is measured
+   exactly instead, every input weighted by how often it is drawn. Measured once per run folder
+   (`references.jsonl`); it is what the report and the held-out check use.
+2. A scoring: a seed drawn afresh, and from it 128 copies, each copy's accuracy on 65,536 inputs (or every input),
+   and the estimator 32 times on each copy. Everything follows from the one seed, so a receipt can be made again.
+3. The parts: mean squared error, bias, the spread of the estimates within a copy and between copies, how well
+   they follow the copies' accuracies, mean and range of the cost, draws per run; the reward; the benchmark. A
+   scoring takes 5 to 30 seconds, most of it the copies' accuracies.
 
 `python -m arcagent.verifier --model models/rnn-g --network rnn-g-s0 --estimator e.json` scores an estimator file
-on its own, with the benchmark, as the worked example does.
+on the network itself, with the benchmark, as the worked example does; with `--config config/pilot/rnn-g.yaml` it
+scores as that pilot does, on copies.
 
 ### The prompt
 
@@ -257,7 +331,9 @@ You are working on a research task with two tools (run_python and submit_estimat
 
 Every round's prompt is one template, [`prompts/round_v1.md`](prompts/round_v1.md), filled in from the model folder
 (`model.py`, `task.py`, the sentences on the data set and the task), the guide
-([`agent_docs/ESTIMATOR.md`](agent_docs/ESTIMATOR.md)), the reward's formula and explanation from
+([`agent_docs/ESTIMATOR.md`](agent_docs/ESTIMATOR.md), with [`agent_docs/COPIES.md`](agent_docs/COPIES.md) for a
+run on copies), how a scoring is made ([`prompts/scoring_copies_v1.md`](prompts/scoring_copies_v1.md), or
+`scoring_network_v1.md` for a run on the network itself), the reward's formula and explanation from
 `arcagent/rewards.py`, the budgets, and the history. The agent ends each round with notes under fixed headings
 (what the network does, how the estimator works, the best estimator, next), which are all the next round knows of
 it besides the saved estimators.
@@ -313,7 +389,9 @@ of the others). Every run starts by trying real escapes in the chosen mode. `doc
 ### Other commands
 
     python -m arcagent.report --model models/rnn-g --network rnn-g-s0           # the reference estimators, no run
+    python -m arcagent.report --config config/pilot/rnn-a.yaml                  # the same, scored as the pilot scores
     python -m arcagent.verifier --model models/rnn-g --network rnn-g-s0 --estimator e.json --runs 4096
+    python -m arcagent.calibrate --model models/lin-a --network lin-a-s0        # a network's share and size
     python -m arcagent.loop rescore --run <run folder> --lam 1e-7               # the records under another lambda
     python withheld/rnn/convert.py                                             # check the weights against AlgZoo's files
 
@@ -334,8 +412,10 @@ of the others). Every run starts by trying real escapes in the chosen mode. `doc
 | Path | What |
 | --- | --- |
 | `arcagent/lang.py` | the estimator language: prices, random draws, the interpreter and the builder |
-| `arcagent/networks.py` | model folders: the network and the task in the language, the accuracy measurement |
-| `arcagent/verifier.py` | the verifier: the accuracy, the runs, the parts, the benchmark |
+| `arcagent/networks.py` | model folders: the network and the task in the language |
+| `arcagent/measure.py` | the accuracy measurement, how a copy is made, a scoring on copies (also in the sandbox) |
+| `arcagent/verifier.py` | the verifier: the copies or the network, the runs, the parts, the benchmark |
+| `arcagent/calibrate.py` | a network's share and size for its copies |
 | `arcagent/rewards.py` | reward functions (`r_lambda`) and their texts for the prompt |
 | `arcagent/session.py` | the agent's two tools and what its code is handed |
 | `arcagent/loop.py` | the rounds, the lock, the held-out check, resume, rescore |

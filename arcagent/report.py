@@ -3,6 +3,7 @@
     python -m arcagent.report --run <run folder>                writes report.md and report.json again
     python -m arcagent.report --model models/rnn-g --network rnn-g-s0 [--runs 4096] [--lam 1e-6]
                                                               the reference estimators and plain sampling there
+    python -m arcagent.report --config config/pilot/rnn-a.yaml  the same as that pilot's runs are scored: on copies
 
 A run's report gives the network's accuracy as the verifier measured it, every submission with its parts, the
 locked estimator scored again with a fresh seed, the locked estimator on every held-out network, the reference
@@ -293,26 +294,43 @@ def write(path: Path) -> dict:
     return summary
 
 
-def model_references(model_path: str, network: str, runs: int, lam: float, sizes: list, out=print) -> list:
-    """The withheld references and plain sampling on one network, with no run."""
+def model_references(model_path: str, network: str, runs: int, lam: float, sizes: list, out=print, cfg: dict | None = None) -> list:
+    """The withheld references and plain sampling on one network, with no run. cfg: a run config to score under
+    (its reward, its verifier settings and with them its copies); without one, on the network itself."""
+    from . import rewards
     from .networks import load_model
     from .verifier import Verifier
 
     m = load_model(model_path)
-    v = Verifier(m, network, {"reward": {"name": "r_lambda", "lam": lam}, "verifier": {"runs": runs}})
+    v = Verifier(m, network, cfg or {"reward": {"name": "r_lambda", "lam": lam}, "verifier": {"runs": runs}})
+    lam = rewards.lam_of(v.reward_cfg) or 0.0
     ref = v.reference()
     A = ref["accuracy"]
+    on = v.copies is not None
     out(f"{network}: accuracy {A:.6f}, {_how(ref)}; forward pass {v.F:,} operations; "
         f"one more sampled input {v.sample_ops / v.F:.4f} forward passes")
     ests = dict(m.reference_entries(v.weights))
-    best = max(1, round(math.sqrt(A * (1 - A) / (lam * v.sample_ops / v.F)))) if lam > 0 else None
+    var = A * (1 - A)
+    if on:
+        c = v.copies
+        out(f"scored on {c['count']:,} copies, {c['runs']:,} runs on each: each weight changed with probability {c['share']:g} by "
+            f"{c['size']:g} times its matrix's RMS")
+        g = m.graph(v.weights)
+        ests["the network's own accuracy, written in as a constant"] = g.entry(g.const(float(A)))
+        var = v.score(next(iter(ests.values())), seed=0)["benchmark"]["variance"]
+    best = max(1, round(math.sqrt(var / (lam * v.sample_ops / v.F)))) if lam > 0 else None
     for n in sorted(set(sizes + ([best] if best else []))):
         ests[f"plain sampling, {n} inputs"] = m.monte_carlo(v.weights, n)
     rows = []
     for name, est in ests.items():
         r = v.score(est, seed=0)
-        rows.append(_row(name, r))
-    for line in _table(rows):
+        rows.append(_row(name, r, on))
+        if on and name.startswith("the network's own"):
+            b = r["benchmark"]
+            out(f"the copies' accuracies: mean {r['parts']['accuracy']:.4f}, standard deviation {100 * r['parts']['accuracy_std']:.2f} "
+                f"points; the best number written in would score {b['constant_best']:.4e}, the best plain sampling "
+                f"{b['best_reward']:.4e}")
+    for line in _table(rows, on):
         out(line)
     return rows
 
@@ -321,11 +339,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     which = ap.add_mutually_exclusive_group(required=True)
     which.add_argument("--run", help="a run folder: write its report again")
-    which.add_argument("--model", help="a model folder: score its reference estimators")
+    which.add_argument("--model", help="a model folder: score its reference estimators on the network itself")
+    which.add_argument("--config", help="a run config: score its model's reference estimators as its runs are scored")
     ap.add_argument("--network", help="with --model: the network (default: the first)")
     ap.add_argument("--runs", type=int, default=4096)
     ap.add_argument("--lam", type=float, default=1e-6)
-    ap.add_argument("--sizes", default="16,64,256", help="with --model: plain sampling at these numbers of inputs")
+    ap.add_argument("--sizes", default="16,64,256", help="plain sampling at these numbers of inputs")
     args = ap.parse_args(argv)
     if args.run:
         write(Path(args.run))
@@ -333,8 +352,15 @@ def main(argv=None) -> int:
         return 0
     from .networks import load_model
 
+    sizes = [int(s) for s in args.sizes.split(",") if s]
+    if args.config:
+        from . import run_config
+
+        cfg = run_config.load(args.config)
+        model_references(cfg["model"], args.network or cfg["network"], args.runs, args.lam, sizes, cfg=cfg)
+        return 0
     network = args.network or load_model(args.model).network_ids()[0]
-    model_references(args.model, network, args.runs, args.lam, [int(s) for s in args.sizes.split(",") if s])
+    model_references(args.model, network, args.runs, args.lam, sizes)
     return 0
 
 

@@ -69,6 +69,14 @@ with the rest empty; `normal`, real numbers drawn from the standard normal distr
 `max_batch`, the most inputs it is run on at once (the attention networks: 16,384, so that a batch's vectors stay
 within the limit per value).
 
+**Copies.** A scoring is made on copies of the run's network, each with a few weights changed at random, drawn
+afresh for every scoring (`arcagent/measure.py`; docs/REWARD.md, section 5, says why): 128 copies, each copy's
+accuracy measured on 65,536 inputs (every input where the data set has no more), the estimator run 32 times on
+each. How a copy is made is a network's own (`verifier.copies.share` and `size` in its pilot config, from
+`python -m arcagent.calibrate`), and the agent is told it. The steps below are a scoring on the network itself,
+which `verifier.copies.count: 0` asks for and which held-out networks always get; on copies, step 2's A is each
+copy's, and the benchmark is plain sampling on the same copies.
+
 `arcagent/verifier.py` is the only judge. Given an estimator, it
 
 1. checks that it is an estimator (shape, operations, limits) and refuses it with the reason if not;
@@ -90,7 +98,9 @@ and a comparison (`Model.sample_ops`; 2,989 for the 432-weight RNN). The benchma
 A round is one session with two tools (`arcagent/session.py`):
 
 - `run_python(code)`: runs the agent's code in a sandbox. In scope: the weights, `lang`, `model`, `task`,
-  `info` (sizes, the data set, F, the verifier's runs and limits), `graph()`, `run(estimator, runs, seed)` (the
+  `info` (sizes, the data set, F, the verifier's runs and limits, how copies are made), `copy(seed)`,
+  `accuracy(weights)` and `score_on_copies(estimator)` (a copy, its accuracy and a whole scoring, made as the
+  verifier makes them), `graph()`, `run(estimator, runs, seed)` (the
   verifier's own code), `score_against(estimator, accuracy)` (the reward for an accuracy the agent supplies),
   `sample(n)` and `outputs(x)` (inputs and the network's outputs and the task's answers on them), the saved
   estimators and `save_estimator(name, estimator)`. Exploring costs nothing.
@@ -160,7 +170,9 @@ report from the records alone, and never measures again what it measured before.
 5. `withheld/<name>/task.yaml`: provenance, the verifier's accuracy of each network, and the hygiene strings: each
    accuracy to four places and as a percent to two, and where they do not round to 1, to three places and to one;
    `tests/test_hygiene.py` checks the check would catch every form. Optionally `references.py`.
-6. A pilot in `config/pilot/<name>.yaml` with its held-out networks, and a `-smoke` version to try first.
+6. A pilot in `config/pilot/<name>.yaml` with its held-out networks, and a `-smoke` version to try first. Its
+   `verifier.copies` (share and size) come from `python -m arcagent.calibrate`, whose record goes in
+   `withheld/<name>/copies.yaml`.
 7. The model's prices and task in `tests/test_models.py` (`PRICES`, `TASKS`), with a numpy version of a new
    architecture.
 
@@ -169,7 +181,8 @@ report from the records alone, and never measures again what it measured before.
 | What | Default | Where |
 | --- | --- | --- |
 | Reward | `r_lambda`, lambda = 1e-6 | `config/defaults.yaml`, `reward` |
-| Runs per scoring | 4,096 | `verifier.runs` |
+| Scoring | on 128 copies of the network, 32 runs on each, each copy's accuracy on 65,536 inputs | `verifier.copies` (`count: 0`: on the network itself) |
+| Runs per scoring on a network itself | 4,096 | `verifier.runs` |
 | A | 2,097,152 inputs, seed 20261124; every input where the data set has no more | `verifier.reference_inputs`, `reference_seed` |
 | Time per scoring | 600 s for all the runs | `verifier.time_limit_s` |
 | Estimator limits | 400 nodes, 256 numbers in constants | `entry` |

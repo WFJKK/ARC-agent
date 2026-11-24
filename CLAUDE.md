@@ -29,4 +29,8 @@ built on Mech-Interp-Agent-level1, and keeps its rules.
   under another.
 - The reward is meant to be changed, the measuring is not: a new reward is a function in `arcagent/rewards.py`
   (see `docs/REWARD.md`) of the parts every receipt keeps.
+- A run is scored on copies of its network (`arcagent/measure.py`), so that a number measured beforehand and written
+  into an estimator does not win. A new network gets its `verifier.copies` (share, size) from
+  `python -m arcagent.calibrate`; what that measured goes in `withheld/<model>/copies.yaml`, and runs made with
+  different shares or sizes are not compared.
 - In docs: no em dashes, and keep displayed math short.

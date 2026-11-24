@@ -2,7 +2,7 @@
 on the network itself and on its copies. They are what a scoring on copies is meant to leave room for, an estimate
 that follows the weights, and they say how much room there is: going through every input costs about what the
 best plain sampling loses on the linear network and well under it on the attention network, and the two-unit
-recurrent network has an exact estimator at a seventh of plain sampling's loss."""
+recurrent network has an exact estimator at about a sixth of plain sampling's loss."""
 
 import math
 
