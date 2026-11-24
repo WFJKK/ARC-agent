@@ -1,0 +1,42 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/lin-c/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  Two linear networks of width 8 trained on exactly two tokens for the smallest, asked about one to four tokens:
+  lin-a's counterpart for the other task.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/lin-c, the same
+  files byte for byte (the sha256 in models/lin-c/config.yaml); its withheld/lin-c/task.yaml has the whole record.
+  They were trained by level 1's withheld/lin-c/train.py (the proof pipeline's recipe for lin-a's networks,
+  written in numpy; seeds 0 and 1; 4,000 steps).
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): 2,097,152 inputs drawn with
+# seed 20261124, 32,768 at a time, run through the interpreter. Standard error at most 0.026 points.
+accuracy:
+  lin-c-s0: 0.836789   # 1754873 of 2097152
+  lin-c-s1: 0.855413   # 1793932 of 2097152
+roles: lin-c-s0 for the rounds (config/pilot/lin-c.yaml); the others held out
+hygiene:
+  - Gross
+  - compact proof
+  - compact-proof
+  - attn-max
+  - attn-min
+  - max2
+  - max4
+  - min2
+  - min4
+  - trained on
+  - two tokens
+  - "2 tokens"
+  - exactly two
+  - pairs
+  - "0.8368"
+  - "83.68%"
+  - "0.837"
+  - "83.7%"
+  - "0.8554"
+  - "85.54%"
+  - "0.855"
+  - "85.5%"

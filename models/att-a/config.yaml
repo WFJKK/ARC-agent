@@ -1,0 +1,43 @@
+# The model att-a: a one-layer, one-head attention network on one or two tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/att-a/, which no tool of the agent reaches.
+name: att-a
+sizes:
+  n_ctx: 2
+  d_vocab: 64
+  d_model: 32
+  d_head: 32
+input_space: [65, 65]
+n_outputs: 64
+max_batch: 16384    # inputs at once: a batch's slot vectors stay within the language's limit per value
+data_set:
+  kind: lengths
+  lengths: [1, 2]
+  vocab: 64
+  empty: 64
+  says: >
+    An input is drawn like this. First a number of tokens is picked, 1 or 2, each equally likely. Then that many
+    tokens are picked, each a whole number from 0 to 63 and equally likely. The tokens fill the first slots and
+    a remaining slot is empty (64). The data set is every input that can be drawn this way, each counted as
+    often as it is drawn: 4,160 different inputs, 64 with one token and 4,096 with two, yet each number of
+    tokens makes up half of the data set.
+task:
+  says: >
+    The task's answer for an input is the largest of its tokens. An empty slot is not a token.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [65, 32]
+  pos: [2, 32]
+  query: [32, 32]
+  key: [32, 32]
+  value: [32, 32]
+  out: [32, 32]
+  unembed: [32, 64]
+# att-a-s0 is the run's network in config/pilot/att-a.yaml; the others are its held-out networks.
+networks:
+  - id: att-a-s0
+    weights: zoo/att-a-s0.npz
+    sha256: d824d6ebe22ab513d2bda7cfd229df17a2b2d303272b023522e0b123afe5c03b
+  - id: att-a-s1
+    weights: zoo/att-a-s1.npz
+    sha256: 98bf7e58c78d22ecfdc88ade5d839c9dedfd2910d14aca0050a6a1b114c6bc17

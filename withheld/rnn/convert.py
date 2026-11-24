@@ -1,20 +1,24 @@
-"""Make the networks of the RNN models rnn-b and rnn-g from ARC's AlgZoo. Withheld from the agent, like everything here.
+"""Make the networks of the RNN models rnn-a, rnn-b, rnn-d, rnn-e, rnn-f and rnn-g from ARC's AlgZoo. Withheld from the
+agent, like everything here.
 
     python withheld/rnn/convert.py              writes the networks that are missing, checks the others
     python withheld/rnn/convert.py --from DIR   the same from another copy of the files
 
-Taken from Mech-Interp-Agent-level1 (withheld/rnn/convert.py), which made the same files under other names:
-rnn-g-s0 here is its rnn-g-s0, rnn-g-z<seed> its rnn-c-s<seed>, and rnn-b-s<seed> its rnn-b-s<seed>.
+Taken from Mech-Interp-Agent-level1 (withheld/rnn/convert.py), which made the same files: rnn-g-z<seed> here is its
+rnn-c-s<seed>, and every other network has its name there.
 
 AlgZoo (github.com/alignment-research-center/alg-zoo, commit 4433f50, licence MIT-0) trains tiny networks on
 algorithmic tasks and publishes them uninterpreted. Its 2nd argmax family is one-layer ReLU RNNs without biases
 (alg_zoo/architectures.py, DistRNN), trained to output the position of the second-largest of n numbers, each
 drawn from the standard normal distribution (alg_zoo/tasks.py, task_2nd_argmax: x.argsort(-1)[..., -2]).
-pth/ holds the state-dict files of its public folder gs://arc-ml-public/alg/zoo for two of its sizes, named
+pth/ holds the state-dict files of its public folder gs://arc-ml-public/alg/zoo for three of its sizes, named
 2nd_argmax_<hidden>_<n>_<training sequences>_<seed>.pth, as fetched on 12 November 2026 by
 
-    for c in 4_3 16_10; do for s in 0 1 2 3 4; do
-      curl -sfO "https://storage.googleapis.com/arc-ml-public/alg/zoo/2nd_argmax_${c}_1073741824_${s}.pth"; done; done
+    for c in 2_2 4_3 16_10; do for n in 1073741824 0; do for s in 0 1 2 3 4; do
+      curl -sfO "https://storage.googleapis.com/arc-ml-public/alg/zoo/2nd_argmax_${c}_${n}_${s}.pth"; done; done; done
+
+The fully trained ones (2^30 training sequences) make rnn-a, rnn-b and the zoo's networks of rnn-g; the same seeds
+before any training (0 sequences: AlgZoo saves the model as it starts) make rnn-d, rnn-e and rnn-f.
 
 and the 16-unit network AlgZoo's write-up analyses and sets as its challenge, published outside the zoo folder
 (alg_zoo/loading.py, example_2nd_argmax) and fetched on 17 November 2026 by
@@ -43,11 +47,15 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 PTH = HERE / "pth"
-SIZES = {"rnn-b": (4, 3), "rnn-g": (16, 10)}  # hidden units, numbers per input
-NETWORKS = {  # model: [(network id, the file it is converted from)]
+SIZES = {"rnn-a": (2, 2), "rnn-b": (4, 3), "rnn-g": (16, 10), "rnn-d": (2, 2), "rnn-e": (4, 3), "rnn-f": (16, 10)}
+NETWORKS = {  # model: [(network id, the file it is converted from)]; 1073741824 training sequences, or 0: untrained
+    "rnn-a": [(f"rnn-a-s{s}", f"2nd_argmax_2_2_1073741824_{s}.pth") for s in range(5)],
     "rnn-b": [(f"rnn-b-s{s}", f"2nd_argmax_4_3_1073741824_{s}.pth") for s in range(5)],
     "rnn-g": [("rnn-g-s0", "one_layer_16_hidden_94_acc_2nd_argmax.pth")]
              + [(f"rnn-g-z{s}", f"2nd_argmax_16_10_1073741824_{s}.pth") for s in range(5)],
+    "rnn-d": [(f"rnn-d-s{s}", f"2nd_argmax_2_2_0_{s}.pth") for s in range(5)],
+    "rnn-e": [(f"rnn-e-s{s}", f"2nd_argmax_4_3_0_{s}.pth") for s in range(5)],
+    "rnn-f": [(f"rnn-f-s{s}", f"2nd_argmax_16_10_0_{s}.pth") for s in range(5)],
 }
 NAMES = {"rnn.weight_ih_l0": "input", "rnn.weight_hh_l0": "recurrent", "linear.weight": "readout"}
 DTYPES = {"FloatStorage": np.float32, "DoubleStorage": np.float64, "HalfStorage": np.float16, "LongStorage": np.int64,

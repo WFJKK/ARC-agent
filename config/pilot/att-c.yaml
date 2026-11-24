@@ -1,0 +1,8 @@
+# The pilot on att-c-s0: a one-layer, one-head attention network on one to four tokens (models/att-c). Its held-out networks are the model's others.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-att-c
+model: models/att-c
+network: att-c-s0
+heldout:
+  networks: [att-c-s1]

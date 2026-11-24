@@ -1,0 +1,42 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/lin-a/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  lin-a-s0 and lin-a-s1 are the proof pipeline's two linear networks for the larger of two tokens (Compact-Proof-
+  Agent, models/max2, setting v64, seeds 0 and 1), trained on inputs of the data set's own kind: two tokens of 0
+  to 63, uniformly random. Each differs from the task on a few inputs of small tokens only: s0 on (0, 0), where it
+  outputs 1; s1 on (0, 0), (0, 1), (1, 0) and (1, 1), where it outputs 2.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/lin-a, the same
+  files byte for byte (the sha256 in models/lin-a/config.yaml); its withheld/lin-a/task.yaml has the whole record.
+  They are the proof pipeline's networks with their three arrays renamed (embedding.weight, linear.weight and
+  unembedding.weight to embed, hidden and unembed).
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): exact, every one of the
+# data set's 4,096 inputs, each weighted by how often it is drawn.
+accuracy:
+  lin-a-s0: 0.999756   # 4095 of 4096 inputs right
+  lin-a-s1: 0.999023   # 4092 of 4096 inputs right
+roles: lin-a-s0 for the rounds (config/pilot/lin-a.yaml); the others held out
+hygiene:
+  - Gross
+  - compact proof
+  - compact-proof
+  - attn-max
+  - attn-min
+  - max2
+  - max4
+  - min2
+  - min4
+  - trained on
+  - "4,095"
+  - "4095"
+  - "4,092"
+  - "4092"
+  - "0.9998"
+  - "99.98%"
+  - "0.9990"
+  - "99.90%"
+  - "0.999"
+  - "99.9%"

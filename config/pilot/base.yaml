@@ -1,8 +1,10 @@
 # The ARC-agent pilot, without its model: what every pilot run shares. Not a run by itself. A run is a file next
 # to this one that extends it and names a model, the network of its rounds and its held-out networks:
-#   config/pilot/rnn-g.yaml         the 432-weight challenge network, ten real numbers, 16 units
+#   config/pilot/rnn-g.yaml         the 432-weight network of models/rnn-g, ten real numbers, 16 units
 #   config/pilot/rnn-g-smoke.yaml   one short round of it, to see that everything works on this machine
 #   config/pilot/rnn-b-smoke.yaml   a 32-weight network on three numbers, the cheapest check of the whole loop
+#   config/pilot/<model>.yaml       one for each of the other models (models/lin-*, att-*, rnn-a, rnn-d, rnn-e,
+#                                   rnn-f), and rnn-g-z2.yaml, another network of rnn-g; each with a -smoke version
 #
 # A run has two parts (docs/DESIGN.md):
 #   1. the rounds: the agent studies one network and submits estimators of its accuracy; the score is the reward;

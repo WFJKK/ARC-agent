@@ -1,0 +1,62 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/att-e/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  Untrained: each network is the state att-d's trainer starts from (seeds 3000 to 3005), drawn and kept as drawn.
+  A baseline for att-c and att-d, of the same design and data set. The task is att-c's.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/att-e, the same
+  files byte for byte (the sha256 in models/att-e/config.yaml); its withheld/att-e/task.yaml has the whole record.
+  They were drawn by level 1's withheld/att-e/draw.py.
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): 2,097,152 inputs drawn with
+# seed 20261124, 16,384 at a time, run through the interpreter. Standard error at most 0.011 points.
+accuracy:
+  att-e-s0: 0.012624   # 26474 of 2097152
+  att-e-s1: 0.026801   # 56205 of 2097152
+  att-e-s2: 0.014013   # 29387 of 2097152
+  att-e-s3: 0.019596   # 41095 of 2097152
+  att-e-s4: 0.023889   # 50099 of 2097152
+  att-e-s5: 0.021968   # 46070 of 2097152
+roles: att-e-s0 for the rounds (config/pilot/att-e.yaml); the others held out
+hygiene:
+  - untrained
+  - not trained
+  - never trained
+  - before training
+  - random weights
+  - randomly initialized
+  - randomly initialised
+  - random init
+  - initialization
+  - initialisation
+  - baseline
+  - trained on
+  - Gross
+  - compact proof
+  - compact-proof
+  - "0.0126"
+  - "1.26%"
+  - "0.013"
+  - "1.3%"
+  - "0.0268"
+  - "2.68%"
+  - "0.027"
+  - "2.7%"
+  - "0.0140"
+  - "1.40%"
+  - "0.014"
+  - "1.4%"
+  - "0.0196"
+  - "1.96%"
+  - "0.020"
+  - "2.0%"
+  - "0.0239"
+  - "2.39%"
+  - "0.024"
+  - "2.4%"
+  - "0.0220"
+  - "2.20%"
+  - "0.022"
+  - "2.2%"

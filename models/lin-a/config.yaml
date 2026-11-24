@@ -1,0 +1,31 @@
+# The model lin-a: a linear network on two tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/lin-a/, which no tool of the agent reaches.
+name: lin-a
+sizes:
+  n_ctx: 2
+  d_vocab: 64
+  d_model: 8
+input_space: [64, 64]
+n_outputs: 64
+data_set:
+  kind: all
+  says: >
+    An input is two tokens, x_0 and x_1, each a whole number from 0 to 63 and each as likely as any other. The
+    data set is every one of the 4,096 inputs, each as likely as any other.
+task:
+  says: >
+    The task's answer for an input is the larger of its two tokens.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [8, 64]
+  hidden: [8, 8]
+  unembed: [64, 8]
+# lin-a-s0 is the run's network in config/pilot/lin-a.yaml; the others are its held-out networks.
+networks:
+  - id: lin-a-s0
+    weights: zoo/lin-a-s0.npz
+    sha256: 79cdc0db21984c7029a03ef89e2cdf42d345d826d79fd50169bd1eebec670cad
+  - id: lin-a-s1
+    weights: zoo/lin-a-s1.npz
+    sha256: 7f1591eba201f9e78f0cbbaa4b0dc6ecd5a6b20e3202677f29563ec0927f51f9

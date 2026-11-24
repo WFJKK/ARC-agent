@@ -1,0 +1,37 @@
+# The model lin-d: a linear network on one to eight tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/lin-d/, which no tool of the agent reaches.
+name: lin-d
+sizes:
+  n_ctx: 8
+  d_vocab: 64
+  d_model: 8
+input_space: [65, 65, 65, 65, 65, 65, 65, 65]
+n_outputs: 64
+data_set:
+  kind: lengths
+  lengths: [1, 2, 3, 4, 5, 6, 7, 8]
+  vocab: 64
+  empty: 64
+  says: >
+    An input is drawn like this. First a number of tokens is picked from 1 to 8, each equally likely. Then that
+    many tokens are picked, each a whole number from 0 to 63 and equally likely. The tokens fill the first slots
+    and the remaining slots are empty (64). The data set is every input that can be drawn this way, each counted
+    as often as it is drawn: about 2.8 x 10^14 different inputs, far more with eight tokens than with one, yet
+    every number of tokens makes up an eighth of the data set.
+task:
+  says: >
+    The task's answer for an input is the smallest of its tokens. An empty slot is not a token.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [8, 65]
+  hidden: [8, 8]
+  unembed: [64, 8]
+# lin-d-s0 is the run's network in config/pilot/lin-d.yaml; the others are its held-out networks.
+networks:
+  - id: lin-d-s0
+    weights: zoo/lin-d-s0.npz
+    sha256: e74d65c1e039777063148fa6c4ff85eb0cf3084a65bf3e167988413b3541a944
+  - id: lin-d-s1
+    weights: zoo/lin-d-s1.npz
+    sha256: 92c0af59a5cfb5dc156a308bc738cfa8f26532921f4f629a3727778fbfcba951

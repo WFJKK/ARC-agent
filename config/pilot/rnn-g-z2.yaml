@@ -1,0 +1,9 @@
+# The pilot on rnn-g-z2: another network of models/rnn-g (ten real numbers in, 16 units, 2,937 operations per
+# forward pass), the one level 1 ran its model rnn-c on. Held out: the model's other networks of its kind, and s0.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-rnn-g-z2
+model: models/rnn-g
+network: rnn-g-z2
+heldout:
+  networks: [rnn-g-z3, rnn-g-z0, rnn-g-z1, rnn-g-z4, rnn-g-s0]

@@ -1,0 +1,8 @@
+# The pilot on lin-f-s0: a linear network on one to eight tokens (models/lin-f). Its held-out networks are the model's others.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-lin-f
+model: models/lin-f
+network: lin-f-s0
+heldout:
+  networks: [lin-f-s1, lin-f-s2, lin-f-s3, lin-f-s4, lin-f-s5]

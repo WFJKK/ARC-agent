@@ -1,0 +1,42 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/att-d/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  Gross et al.'s one-layer, one-head, attention-only transformer, as att-a's, trained on exactly four tokens for
+  the smallest, asked about one to four tokens: att-c's counterpart (the proof pipeline has no such network of
+  this size).
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/att-d, the same
+  files byte for byte (the sha256 in models/att-d/config.yaml); its withheld/att-d/task.yaml has the whole record.
+  They were trained by level 1's withheld/att-d/train.py (att-c's recipe written in numpy, the smallest token as
+  the label; seeds 0 and 1; 4,000 steps).
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): 2,097,152 inputs drawn with
+# seed 20261124, 16,384 at a time, run through the interpreter. Standard error at most 0.034 points.
+accuracy:
+  att-d-s0: 0.866388   # 1816947 of 2097152
+  att-d-s1: 0.597375   # 1252786 of 2097152
+roles: att-d-s0 for the rounds (config/pilot/att-d.yaml); the others held out
+hygiene:
+  - Gross
+  - compact proof
+  - compact-proof
+  - attn-max
+  - attn-min
+  - max2
+  - max4
+  - min2
+  - min4
+  - trained on
+  - four tokens
+  - "4 tokens"
+  - exactly four
+  - "0.8664"
+  - "86.64%"
+  - "0.866"
+  - "86.6%"
+  - "0.5974"
+  - "59.74%"
+  - "0.597"
+  - "59.7%"

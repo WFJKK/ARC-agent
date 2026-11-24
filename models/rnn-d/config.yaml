@@ -1,0 +1,41 @@
+# The model rnn-d: a recurrent network of 2 units on two real numbers.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/rnn-d/, which no tool of the agent reaches.
+name: rnn-d
+sizes:
+  n_ctx: 2
+  d_hidden: 2
+input_space: [real, real]
+n_outputs: 2
+data_set:
+  kind: normal
+  says: >
+    An input is two real numbers, x_0 and x_1, each drawn on its own from the standard normal distribution (mean
+    0, standard deviation 1). The data set is every input that can be drawn this way, each weighted by how
+    likely it is to be drawn.
+task:
+  says: >
+    The task's answer for an input is the position of its second-largest number: the i for which exactly one of
+    the two numbers is larger than x_i, which with two numbers is the position of the smaller one.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  input: [2, 1]
+  recurrent: [2, 2]
+  readout: [2, 2]
+# rnn-d-s2 is the run's network in config/pilot/rnn-d.yaml; the others are its held-out networks.
+networks:
+  - id: rnn-d-s2
+    weights: zoo/rnn-d-s2.npz
+    sha256: bcad7da6649e6803ef5d0b7a381c06ded56f8724267b2f16959489d4292e9081
+  - id: rnn-d-s1
+    weights: zoo/rnn-d-s1.npz
+    sha256: f88ec88bce6779ddf671bc21d3fe2de1bb821f50199d6f3b2dc061a6a13fe3a6
+  - id: rnn-d-s0
+    weights: zoo/rnn-d-s0.npz
+    sha256: 31119970ca4092f3883021599dc6eb947a0a82da80b6377e3fd350d8f68beac2
+  - id: rnn-d-s3
+    weights: zoo/rnn-d-s3.npz
+    sha256: b6c8ff15335802a557997f1bac899f900a8a13f6e8b5e4cd9aa17e08a94d8ce4
+  - id: rnn-d-s4
+    weights: zoo/rnn-d-s4.npz
+    sha256: 9f9367834c1ab6b4adac273cd5bd2624157f2f62f374eeae3ab7d94a4bb58329

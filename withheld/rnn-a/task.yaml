@@ -1,0 +1,43 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/rnn-a/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  ARC's AlgZoo networks of hidden size 2 on two numbers (2nd argmax), seeds 0 to 4 of one recipe, trained on 2^30
+  inputs drawn exactly as the data set is; s2 is the zoo's own pick. s0 and s4 learned nothing and answer 0 on
+  every input; s3 is right on about 87%.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/rnn-a, the same
+  files byte for byte (the sha256 in models/rnn-a/config.yaml); its withheld/rnn-a/task.yaml has the whole record.
+  They are converted by withheld/rnn/convert.py from 2nd_argmax_2_2_1073741824_<seed>.pth (gs://arc-ml-
+  public/alg/zoo).
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): 2,097,152 inputs drawn with
+# seed 20261124, 32,768 at a time, run through the interpreter. Standard error at most 0.035 points.
+accuracy:
+  rnn-a-s2: 0.999918   # 2096980 of 2097152
+  rnn-a-s0: 0.499569   # 1047673 of 2097152
+  rnn-a-s1: 0.999890   # 2096921 of 2097152
+  rnn-a-s3: 0.874591   # 1834150 of 2097152
+  rnn-a-s4: 0.499569   # 1047673 of 2097152
+roles: rnn-a-s2 for the rounds (config/pilot/rnn-a.yaml); the others held out
+hygiene:
+  - AlgZoo
+  - alg-zoo
+  - alg_zoo
+  - alignment.org
+  - Alignment Research
+  - arc-ml
+  - "2nd_argmax"
+  - "1073741824"
+  - trained on
+  - "0.9999"
+  - "99.99%"
+  - "0.4996"
+  - "49.96%"
+  - "0.500"
+  - "50.0%"
+  - "0.8746"
+  - "87.46%"
+  - "0.875"
+  - "87.5%"

@@ -1,0 +1,8 @@
+# The pilot on rnn-d-s2: a recurrent network of 2 units on two real numbers (models/rnn-d). Its held-out networks are the model's others.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-rnn-d
+model: models/rnn-d
+network: rnn-d-s2
+heldout:
+  networks: [rnn-d-s1, rnn-d-s0, rnn-d-s3, rnn-d-s4]

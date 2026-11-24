@@ -1,0 +1,9 @@
+# The pilot on rnn-b-s0: a recurrent network of 4 units on three real numbers (models/rnn-b), 78 operations per
+# forward pass. Its held-out networks are the model's others. config/pilot/rnn-b-smoke.yaml is its one-round check.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-rnn-b
+model: models/rnn-b
+network: rnn-b-s0
+heldout:
+  networks: [rnn-b-s4, rnn-b-s1, rnn-b-s2, rnn-b-s3]

@@ -1,0 +1,8 @@
+# The pilot on lin-a-s0: a linear network on two tokens (models/lin-a). Its held-out networks are the model's others.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-lin-a
+model: models/lin-a
+network: lin-a-s0
+heldout:
+  networks: [lin-a-s1]

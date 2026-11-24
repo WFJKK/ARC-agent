@@ -1,0 +1,62 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/lin-f-4/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  Untrained: lin-f's networks byte for byte, asked about exactly four tokens. A baseline for lin-b-4, whose task
+  it has.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/lin-f-4, the same
+  files byte for byte (the sha256 in models/lin-f-4/config.yaml); its withheld/lin-f-4/task.yaml has the whole
+  record. They were drawn by level 1's withheld/lin-f-4/draw.py (lin-f's seeds, so lin-f's networks).
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): 2,097,152 inputs drawn with
+# seed 20261124, 32,768 at a time, run through the interpreter. Standard error at most 0.011 points.
+accuracy:
+  lin-f-4-s0: 0.013939   # 29233 of 2097152
+  lin-f-4-s1: 0.009822   # 20599 of 2097152
+  lin-f-4-s2: 0.019022   # 39893 of 2097152
+  lin-f-4-s3: 0.022143   # 46437 of 2097152
+  lin-f-4-s4: 0.024762   # 51929 of 2097152
+  lin-f-4-s5: 0.007668   # 16081 of 2097152
+roles: lin-f-4-s0 for the rounds (config/pilot/lin-f-4.yaml); the others held out
+hygiene:
+  - untrained
+  - not trained
+  - never trained
+  - before training
+  - random weights
+  - randomly initialized
+  - randomly initialised
+  - random init
+  - initialization
+  - initialisation
+  - baseline
+  - trained on
+  - Gross
+  - compact proof
+  - compact-proof
+  - "0.0139"
+  - "1.39%"
+  - "0.014"
+  - "1.4%"
+  - "0.0098"
+  - "0.98%"
+  - "0.010"
+  - "1.0%"
+  - "0.0190"
+  - "1.90%"
+  - "0.019"
+  - "1.9%"
+  - "0.0221"
+  - "2.21%"
+  - "0.022"
+  - "2.2%"
+  - "0.0248"
+  - "2.48%"
+  - "0.025"
+  - "2.5%"
+  - "0.0077"
+  - "0.77%"
+  - "0.008"
+  - "0.8%"

@@ -1,0 +1,49 @@
+# The model lin-f: a linear network on one to eight tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/lin-f/, which no tool of the agent reaches.
+name: lin-f
+sizes:
+  n_ctx: 8
+  d_vocab: 64
+  d_model: 8
+input_space: [65, 65, 65, 65, 65, 65, 65, 65]
+n_outputs: 64
+data_set:
+  kind: lengths
+  lengths: [1, 2, 3, 4, 5, 6, 7, 8]
+  vocab: 64
+  empty: 64
+  says: >
+    An input is drawn like this. First a number of tokens is picked from 1 to 8, each equally likely. Then that
+    many tokens are picked, each a whole number from 0 to 63 and equally likely. The tokens fill the first slots
+    and the remaining slots are empty (64). The data set is every input that can be drawn this way, each counted
+    as often as it is drawn: about 2.8 x 10^14 different inputs, far more with eight tokens than with one, yet
+    every number of tokens makes up an eighth of the data set.
+task:
+  says: >
+    The task's answer for an input is the smallest of its tokens. An empty slot is not a token.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [8, 65]
+  hidden: [8, 8]
+  unembed: [64, 8]
+# lin-f-s0 is the run's network in config/pilot/lin-f.yaml; the others are its held-out networks.
+networks:
+  - id: lin-f-s0
+    weights: zoo/lin-f-s0.npz
+    sha256: 56592837b51fad755309d679b1de69b9c53ecfc17103cf7d304f62e1587eca93
+  - id: lin-f-s1
+    weights: zoo/lin-f-s1.npz
+    sha256: 05ca50c28521d374e27ebcca1dee7822ddd71094bd1431dd42359021b7a52e30
+  - id: lin-f-s2
+    weights: zoo/lin-f-s2.npz
+    sha256: 5e40482bbd8e35d5e659386b45d7f0f1209ee1e356c208da3afc2ec84d856c0e
+  - id: lin-f-s3
+    weights: zoo/lin-f-s3.npz
+    sha256: 9a522d860a46883143fc8c1dc53f5a67dd6d0013df58e02907d6797f9dce30c7
+  - id: lin-f-s4
+    weights: zoo/lin-f-s4.npz
+    sha256: 730d0bc86cf6bfa02c7ed03cd91d76cb4ef3dc1e84d4d095c7b754bbd73d861a
+  - id: lin-f-s5
+    weights: zoo/lin-f-s5.npz
+    sha256: 51abf6c6114398abb3c9ee3cc1bf6b94baf3d50066a672caf45c8c1456c9777b

@@ -1,0 +1,49 @@
+# The model lin-e: a linear network on one to four tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/lin-e/, which no tool of the agent reaches.
+name: lin-e
+sizes:
+  n_ctx: 4
+  d_vocab: 64
+  d_model: 8
+input_space: [65, 65, 65, 65]
+n_outputs: 64
+data_set:
+  kind: lengths
+  lengths: [1, 2, 3, 4]
+  vocab: 64
+  empty: 64
+  says: >
+    An input is drawn like this. First a number of tokens is picked from 1, 2, 3 and 4, each equally likely.
+    Then that many tokens are picked, each a whole number from 0 to 63 and equally likely. The tokens fill the
+    first slots and the remaining slots are empty (64). The data set is every input that can be drawn this way,
+    each counted as often as it is drawn: about 17 million different inputs, far more with four tokens than with
+    one, yet every number of tokens makes up a quarter of the data set.
+task:
+  says: >
+    The task's answer for an input is the smallest of its tokens. An empty slot is not a token.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [8, 65]
+  hidden: [8, 8]
+  unembed: [64, 8]
+# lin-e-s0 is the run's network in config/pilot/lin-e.yaml; the others are its held-out networks.
+networks:
+  - id: lin-e-s0
+    weights: zoo/lin-e-s0.npz
+    sha256: f41089cca593d4fed0e0eac736348f205a1c77695d074a101d5397d6e254b8dd
+  - id: lin-e-s1
+    weights: zoo/lin-e-s1.npz
+    sha256: fa2caa02c0bf97a42a0b75081d15c32e21c26ac8fdd1cf9246a8c57766b755b6
+  - id: lin-e-s2
+    weights: zoo/lin-e-s2.npz
+    sha256: b586cce98635e398f25ba00c5c543f28fbd8cdf7dc7a4c1d2556eab233c3190f
+  - id: lin-e-s3
+    weights: zoo/lin-e-s3.npz
+    sha256: d833bfe3121c5de467acfa84d290d95380bd76b2dd2e0bf97aef70efa25cc38f
+  - id: lin-e-s4
+    weights: zoo/lin-e-s4.npz
+    sha256: 8e7bb41d4a5bcff92784880493cc86611be42d2837855bbc5a231b1ae3308e92
+  - id: lin-e-s5
+    weights: zoo/lin-e-s5.npz
+    sha256: 2610cbd645eb12dbca1198432742e7911bc80277a1e9e4c3213bac790465d285

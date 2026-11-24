@@ -181,3 +181,36 @@ def test_a_changed_tree_is_refused_on_resume(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="changed since this run began"):
         loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None)
     assert loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None, accept_changes=True) == "finished"
+
+
+@pytest.mark.parametrize("pilot,exact", [("config/pilot/lin-a-smoke.yaml", 4096), ("config/pilot/att-a-smoke.yaml", 4160),
+                                         ("config/pilot/att-c-smoke.yaml", None)])
+def test_a_whole_run_on_networks_of_tokens(pilot, exact, tmp_path):
+    """One scripted round on a linear network whose data set is listed in full, on an attention network whose data
+    set is listed too though its inputs vary in length (one slot may be empty), and on one whose data set is too
+    large to list: the reference, the scoring, the held-out check and the report."""
+    base = {"runs_dir": str(tmp_path), "backend": "fake", "sandbox": "process", "rounds_max": 1,
+            "session": {"python_calls": 3, "submissions": 2},
+            "verifier": {"runs": 64, "reference_inputs": 2**16}, "heldout": {"runs": 16, "check_runs": 64}}
+    cfg = run_config.load(pilot, base)
+    lines = []
+    path = loop.start(cfg, fake_scripts=FAKE, out=lines.append)
+    refs = loop.cached_references(path)
+    net, held = cfg["network"], cfg["heldout"]["networks"]
+    assert set(refs) == {net, *held}
+    A = refs[net]["accuracy"]
+    if exact:
+        assert all(r["method"] == "exact" and r["inputs"] == exact for r in refs.values())
+        assert any(f"measured exactly, on all {exact:,} of its inputs" in line for line in lines)
+        assert f"exactly, on all {exact:,} inputs of the data set" in (path / "report.md").read_text()
+    else:
+        assert all(r["method"] == "sample" and r["n"] == 2**16 for r in refs.values())
+    (rd,) = loop.completed(path)
+    s32, c09 = rd["submissions"]
+    from arcagent.networks import load_model
+    m = load_model(cfg["model"])
+    W = m.load_weights(net)
+    assert s32["parts"]["cost"] == pytest.approx(32 * m.sample_ops(W) / m.forward_ops(W))
+    assert c09["reward"] == pytest.approx(-((0.9 - A) ** 2))
+    check = read_json(path / "heldout_check.json")
+    assert set(check["networks"]) == set(held) and all(r["runs"] == 64 for r in check["networks"].values())

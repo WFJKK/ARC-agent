@@ -1,0 +1,37 @@
+# Withheld from the agent: no tool reaches this folder, and the strings under hygiene are what the hygiene check
+# looks for in everything the agent can reach (prompt, tool descriptions, sandbox files, names).
+# The agent is told the task and the data set (models/att-a/config.yaml, task.py). What is withheld is how
+# often each network gives the task's answer, which network is which, and where the networks come from:
+# here, how they were made and which inputs they were trained on, if any.
+networks: >
+  Gross et al.'s one-layer, one-head, attention-only transformer from the proof pipeline's zoo (Compact-Proof-
+  Agent, models/attn-max2, setting v64, seeds 0 and 1), trained on exactly two tokens for the larger, asked about
+  one or two tokens. Both networks are right on every input of the data set.
+provenance: >
+  Mech-Interp-Agent-level1 (github.com/WFJKK/Mech-Interp-Agent-level1, commit bee70fb), models/att-a, the same
+  files byte for byte (the sha256 in models/att-a/config.yaml); its withheld/att-a/task.yaml has the whole record.
+  They are the proof pipeline's networks with their arrays renamed (E embed, P pos, WQ query, WK key, WV value, WO
+  out, U unembed) and embed given one more row, all zeros, for the empty slot.
+# The verifier's own measurement (arcagent/networks.py, Model.accuracy): exact, every one of the
+# data set's 4,160 inputs, each weighted by how often it is drawn.
+accuracy:
+  att-a-s0: 1.000000   # 4160 of 4160 inputs right
+  att-a-s1: 1.000000   # 4160 of 4160 inputs right
+roles: att-a-s0 for the rounds (config/pilot/att-a.yaml); the others held out
+hygiene:
+  - Gross
+  - compact proof
+  - compact-proof
+  - attn-max
+  - attn-min
+  - max2
+  - max4
+  - min2
+  - min4
+  - trained on
+  - two tokens
+  - "2 tokens"
+  - exactly two
+  - pairs
+  - "1.0000"
+  - "100.00%"

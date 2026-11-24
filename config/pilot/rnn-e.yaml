@@ -1,0 +1,8 @@
+# The pilot on rnn-e-s0: a recurrent network of 4 units on three real numbers (models/rnn-e). Its held-out networks are the model's others.
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-rnn-e
+model: models/rnn-e
+network: rnn-e-s0
+heldout:
+  networks: [rnn-e-s4, rnn-e-s1, rnn-e-s2, rnn-e-s3]

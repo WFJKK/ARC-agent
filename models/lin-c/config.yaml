@@ -1,0 +1,37 @@
+# The model lin-c: a linear network on one to four tokens.
+# Sizes, the data set, the task and the networks; change values here, never in code.
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/lin-c/, which no tool of the agent reaches.
+name: lin-c
+sizes:
+  n_ctx: 4
+  d_vocab: 64
+  d_model: 8
+input_space: [65, 65, 65, 65]
+n_outputs: 64
+data_set:
+  kind: lengths
+  lengths: [1, 2, 3, 4]
+  vocab: 64
+  empty: 64
+  says: >
+    An input is drawn like this. First a number of tokens is picked from 1, 2, 3 and 4, each equally likely.
+    Then that many tokens are picked, each a whole number from 0 to 63 and equally likely. The tokens fill the
+    first slots and the remaining slots are empty (64). The data set is every input that can be drawn this way,
+    each counted as often as it is drawn: about 17 million different inputs, far more with four tokens than with
+    one, yet every number of tokens makes up a quarter of the data set.
+task:
+  says: >
+    The task's answer for an input is the smallest of its tokens. An empty slot is not a token.
+weights:                # as stored in the zoo and as the agent sees them: name and shape
+  embed: [8, 65]
+  hidden: [8, 8]
+  unembed: [64, 8]
+# lin-c-s0 is the run's network in config/pilot/lin-c.yaml; the others are its held-out networks.
+networks:
+  - id: lin-c-s0
+    weights: zoo/lin-c-s0.npz
+    sha256: e92620a6dd0b7d0cf06c040bbb389a520c7ea701546c4dbc8c6841f7ce93ad62
+  - id: lin-c-s1
+    weights: zoo/lin-c-s1.npz
+    sha256: 33a208cafb4a34e383d8bd89b8ecfff1be83006989e4aeef49cfe9226c74ead9
