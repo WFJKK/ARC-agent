@@ -1,0 +1,11 @@
+[project]
+name = "arc-agent"
+version = "0.1.0"
+description = "An agent writes a cheap estimator of a small network's accuracy; a verifier measures its error and its compute."
+requires-python = ">=3.10"
+dependencies = ["numpy", "pyyaml", "psutil"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
