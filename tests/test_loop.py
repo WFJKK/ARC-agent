@@ -134,7 +134,9 @@ def test_the_report(finished):
     assert "## Submissions" in text and "## The locked estimator" in text and "### On the held-out networks" in text
     assert "## Reference estimators" in text and "plain sampling, 64 inputs on rnn-b-s0" in text
     assert "| r3s1 `constant_098` |" in text and "Mean reward on the held-out networks" in text
-    assert "### Its closing notes, last round" in text and "—" not in text
+    assert "### Its closing notes, last round" in text and "\u2014" not in text  # no em dash
+    assert "## What the agent ran" in text and "5 programs in all" in text and "The guard inside Python refused nothing." in text
+    assert rep["exploration"]["reaching"] == []
     assert rep["lock"]["carried_as"] == "r3s1" and len(rep["submissions"]) == 5
     refs = read_json(path / "reference_scores.json")
     best = [r["name"] for r in refs["networks"]["rnn-b-s0"] if r["name"].startswith("plain sampling")]

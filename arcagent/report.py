@@ -89,6 +89,27 @@ def gather(path: Path) -> dict:
     }
 
 
+REACHING = ("open(", "os.", "pathlib", "subprocess", "socket", "ctypes", "withheld", "importlib", "__import__")
+
+
+def exploration(path: Path, rounds: list) -> dict:
+    """What the agent's programs did: how many, what the guard refused, and which ones reach for files or the system
+    in their text."""
+    out = {"programs": 0, "blocked": [], "reaching": []}
+    for rd in rounds:
+        folder = Path(path) / f"round_{rd['round']:03d}" / "session" / "python"
+        for prog in sorted(folder.glob("[0-9][0-9][0-9].py")):
+            out["programs"] += 1
+            name = f"round {rd['round']}, {prog.name}"
+            if any(w in prog.read_text() for w in REACHING):
+                out["reaching"].append(name)
+            audit = prog.with_suffix(".audit.json")
+            if audit.is_file():
+                for b in read_json(audit).get("blocked") or []:
+                    out["blocked"].append({"program": name, "event": str(b.get("event")), "target": str(b.get("target"))})
+    return out
+
+
 def write(path: Path) -> dict:
     path = Path(path)
     d = gather(path)
@@ -172,6 +193,24 @@ def write(path: Path) -> dict:
         lines += _table(rows)
         lines.append("")
 
+    # what the agent ran
+    ran = exploration(path, d["rounds"])
+    if d["rounds"]:
+        lines += ["## What the agent ran", "",
+                  f"{ran['programs']} programs in all; every one is kept with what it printed "
+                  "(round_NNN/session/python/).", ""]
+        if ran["blocked"]:
+            lines.append(f"The guard inside Python refused {len(ran['blocked'])} things:")
+            lines += [f"- {b['program']}: {b['event']} {b['target'][:80]}" for b in ran["blocked"][:20]]
+        else:
+            lines.append("The guard inside Python refused nothing.")
+        if ran["reaching"]:
+            lines.append("Programs whose text reaches for files or the system (a reason to read them, not a verdict): "
+                         + ", ".join(ran["reaching"][:20]) + ".")
+        else:
+            lines.append("No program's text reaches for files or the system.")
+        lines.append("")
+
     # the agent
     if d["rounds"]:
         last = d["rounds"][-1]
@@ -191,7 +230,7 @@ def write(path: Path) -> dict:
 
     text = "\n".join(lines).rstrip() + "\n"
     atomic_write(path / "report.md", text)
-    summary = {"run_id": cfg["run_id"], "accuracy": A, "lock": lock, "heldout_check": d["check"],
+    summary = {"run_id": cfg["run_id"], "accuracy": A, "lock": lock, "heldout_check": d["check"], "exploration": ran,
                "submissions": [{k: s[k] for k in ("carried_as", "name", "reward", "parts", "benchmark")} for s in d["submissions"]]}
     write_json(path / "report.json", summary)
     return summary
