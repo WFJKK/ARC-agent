@@ -1,0 +1,11 @@
+{
+ "calls": [
+  {
+   "tool": "run_python",
+   "args": {
+    "code": "raise ValueError('nothing works today')"
+   }
+  }
+ ],
+ "response": "No notes in the asked-for form this time."
+}

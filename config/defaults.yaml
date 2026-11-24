@@ -1,0 +1,79 @@
+# Defaults of every run. A run config names a model and its network and overrides what it needs.
+# Numbers live here and in the run configs, never in code.
+
+runs_dir: ~/arc-agent-runs            # run folders live outside the repository
+run_id: null                          # a run config sets it; the run folder is <runs_dir>/<run_id>
+
+# who answers a round (docs/DESIGN.md, section 6)
+backend: claude_code                  # claude_code: the Claude Code CLI; fake: scripted
+auth: login                           # who pays: login, the CLI's own login (a subscription is not billed per
+                                      # call); api_key, the key in api_key_env, billed per token, within budget
+api_key_env: CPL_ANTHROPIC_KEY        # never ANTHROPIC_API_KEY: the backend removes that from the CLI's environment
+api_workspace_env: CPL_ANTHROPIC_WORKSPACE  # a workspace ID (wrkspc_...), for a key not scoped to one; unset: none sent
+budget:                               # api_key: dollars, by Claude Code's own count (arcagent/budget.py)
+  run_usd: 60                         # the rounds end when the run has spent this; resume --budget-usd changes it
+  round_usd: 20                       # a round ends when it has spent this; what it submitted stands
+agent_model: claude-fable-5-1         # the model of Mech-Interp-Agent-level1's pilots, for comparison
+effort: high                          # low, medium, high, xhigh, max; null leaves it to the CLI
+claude_code_command: claude
+python_executable: null               # the Python that serves the tools; null: the one running the loop
+api_retries: {tries: 12, first_wait_s: 60, max_wait_s: 1800}
+max_consecutive_refusals: 2
+
+# the rounds
+prompt_template: round_v1
+rounds_max: 5
+patience: 2                           # stop after this many rounds in a row that did not raise the best reward
+
+# one session (one round)
+session:
+  python_calls: 40
+  submissions: 4
+  max_turns: 150
+  seconds: 5400                       # wall clock; when it runs out, what the session submitted stands
+
+# one run_python call
+python:
+  time_limit_s: 300
+  memory_limit_mb: 4096
+  max_result_mb: 8
+  threads: 2
+
+# where the agent's code runs (arcagent/sandbox.py): auto, hardened, container, landlock or process
+sandbox: auto
+sandbox_image: arc-agent-sandbox:1
+sandbox_dir: null
+
+# the verifier (arcagent/verifier.py)
+verifier:
+  runs: 4096                          # an estimator is run this many times per scoring, each with fresh draws
+  reference_inputs: 2097152           # the network's accuracy A is measured on this many inputs of the verifier's own
+  reference_seed: 20261124            # ... drawn with this seed
+  reference_chunk: 32768              # ... this many at a time
+  time_limit_s: 600                   # for all the runs of one scoring together
+
+# what an estimator may hold
+entry:
+  max_nodes: 400
+  max_const_scalars: 256              # numbers written into the estimator
+
+# the reward (arcagent/rewards.py); the parts are kept, so a run can be scored again under another one.
+# A config that names another reward replaces this block whole; one that keeps the name changes parameters.
+reward:
+  name: r_lambda
+  lam: 1.0e-6                         # the price of one forward pass: an error of one point (1e-4) = 100 forward passes
+
+# after the rounds: the locked estimator, unchanged, on these networks of the same model (a run config names them).
+# The agent never sees them or their scores, and they choose nothing.
+heldout:
+  networks: []
+  every_submission: true              # also score every submission there after each round, for the record
+  runs: 256                           # runs per scoring of every submission there (one fixed seed per network)
+  check_runs: 4096                    # runs of the locked estimator there
+
+# the report
+report:
+  sampling_sizes: [16, 64, 256]       # plain sampling at these numbers of inputs, besides the best one under lambda
+
+# strings nothing the agent can reach may contain, besides the model's own list (withheld/<model>/task.yaml)
+hygiene: ["Compact-Proof", "Mech-Interp-Agent"]

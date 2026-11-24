@@ -1,0 +1,20 @@
+{
+ "calls": [
+  {
+   "tool": "run_python",
+   "args": {
+    "code": {
+     "$file": "../fake_run/explore.py"
+    }
+   }
+  },
+  {
+   "tool": "submit_estimator",
+   "args": {
+    "name": "sampling_32"
+   }
+  }
+ ],
+ "response": "",
+ "stop_run": "usage limit reached"
+}

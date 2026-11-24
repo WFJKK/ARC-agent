@@ -1,0 +1,31 @@
+{
+ "calls": [
+  {
+   "tool": "run_python",
+   "args": {
+    "code": {
+     "$file": "bad.py"
+    }
+   }
+  },
+  {
+   "tool": "submit_estimator",
+   "args": {
+    "name": "bad_nan"
+   }
+  },
+  {
+   "tool": "submit_estimator",
+   "args": {
+    "name": "r1s2"
+   }
+  },
+  {
+   "tool": "submit_estimator",
+   "args": {
+    "name": "best"
+   }
+  }
+ ],
+ "response": "Some working text.\n\n## What the network does\nNothing new.\n\n## How the estimator works\nIt samples.\n\n## The best estimator\nAs submitted.\n\n## Next\nMore of the same."
+}

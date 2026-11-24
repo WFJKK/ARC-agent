@@ -26,8 +26,8 @@ otherwise:
     normal uniform integers   a random draw                                     1 per number drawn
     weight const arange reshape transpose slice concat stack                    0
 
-These are the prices of Mech-Interp-Agent-level1 (prices-v1) with three additions: random draws, erf and
-power. The network itself is written in the same language (models/<name>/model.py), so one forward pass
+These are the prices of the language's first version (prices-v1) with three additions: random draws, erf
+and power. The network itself is written in the same language (models/<name>/model.py), so one forward pass
 and an estimator are priced by one list, and an estimator's cost is its operations over one forward pass.
 
 **Runs.** The verifier runs an estimator many times, each run with fresh random draws, and charges every

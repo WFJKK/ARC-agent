@@ -1,0 +1,12 @@
+# The pilot on rnn-g-s0: the 432-weight recurrent network of ARC's challenge (models/rnn-g), ten real numbers in,
+# 2,937 operations per forward pass. The agent is told the network, the task and the data set, and estimates how
+# often the network gives the task's answer. The reward is r_lambda with lambda = 1e-6 (config/defaults.yaml).
+#   rounds on        rnn-g-s0
+#   held out         z0 to z4 (the same design trained from five other starts), n1 to n3 (s0 with noise)
+# Everything else is config/pilot/base.yaml and config/defaults.yaml.
+extends: base.yaml
+run_id: pilot-rnn-g
+model: models/rnn-g
+network: rnn-g-s0
+heldout:
+  networks: [rnn-g-z0, rnn-g-z1, rnn-g-z2, rnn-g-z3, rnn-g-z4, rnn-g-n1, rnn-g-n2, rnn-g-n3]
