@@ -1,8 +1,9 @@
 """The withheld reference estimators that compute the accuracy from the weights: each gives the network's accuracy
 on the network itself and on its copies. They are what a scoring on copies is meant to leave room for, an estimate
-that follows the weights, and they say how much room there is: going through every input costs about what the
-best plain sampling loses on the linear network and well under it on the attention network, and the two-unit
-recurrent network has an exact estimator at about a sixth of plain sampling's loss."""
+that follows the weights, and they say how much room there is: on the linear network going through every input
+costs about what the best plain sampling loses, and four more steps bring the loss to a little over a third of
+it; on the attention network every input costs well under sampling's loss; and the two-unit recurrent network has
+an exact estimator at about a sixth of it."""
 
 import math
 
@@ -47,6 +48,30 @@ def test_sampling_from_the_table_of_token_logits_is_cheaper_than_sampling_the_ne
     assert p["random"] and p["cost"] < 200 and b["samples_at_cost"] < 200  # 448 inputs at the price of 189 sampled ones
     assert abs(p["bias"]) < 0.004 and p["mse"] < 0.6 * b["mse_at_cost"]
     assert r["reward"] > 0.8 * b["best_reward"]  # at least a fifth less loss than the best plain sampling
+
+
+def test_the_linear_networks_estimators_in_the_order_they_were_found():
+    """Each step on lin-a against the best plain sampling on the same copies: sampling from the table, sampling
+    whole permutations from it, counting over every pair with only the rows that can win, and that count with one
+    fitted factor. The count is never below a copy's accuracy."""
+    m, v = setup("lin-a", count=64, runs=16)
+    ests = m.reference_entries(v.weights)
+    got = {name: v.score(e, seed=3, keep_runs=True) for name, e in ests.items()}
+    best = next(iter(got.values()))["benchmark"]["best_reward"]  # the same copies for all: the seed makes them
+    loss = {name: r["reward"] / best for name, r in got.items()}  # 1: what the best plain sampling loses
+    assert 0.55 < loss["the table of token logits, 448 sampled inputs"] < 0.75
+    assert 0.5 < loss["the table of token logits, 6 permutations"] < 0.68
+    assert 0.38 < loss["the top 4 rows of each token's column, every input"] < 0.48
+    assert 0.3 < loss["the top 3 rows of each token's column, every input, error rate times 1.098"] < 0.42
+    top4 = got["the top 4 rows of each token's column, every input"]
+    over = np.array(top4["copies"]["estimate_mean"]) - np.array(top4["copies"]["accuracy"])
+    assert not top4["parts"]["random"] and over.min() >= 0 and 0.002 < over.mean() < 0.008 and top4["parts"]["cost"] < 185
+    perm = got["the table of token logits, 6 permutations"]
+    assert abs(perm["parts"]["bias"]) < 0.004 and perm["parts"]["draws_mean"] == 6 * 64
+    # on the network itself the two counts are the accuracy, or all but
+    for name, least in (("the top 4 rows of each token's column, every input", 4095 / 4096),
+                        ("the top 3 rows of each token's column, every input, error rate times 1.098", 1 - 1.098 / 4096)):
+        assert lang.run_estimator(ests[name], v.weights, 1, 0)["estimates"][0] == pytest.approx(least, abs=1e-12)
 
 
 def test_the_region_estimator_of_the_two_unit_network_is_the_accuracy():

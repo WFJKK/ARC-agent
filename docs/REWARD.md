@@ -122,8 +122,8 @@ estimator on the network itself as well, and `verifier.copies.count: 0` scores a
 **Sampling.** An estimator that samples well scores well. Variance reduction (stratifying, control variates,
 importance sampling) is rewarded like understanding is. Telling the two apart is left to reading the estimators.
 What copies add is that there is something above sampling to reach for: the reference estimators of lin-a, att-a
-and rnn-a compute the accuracy from the weights and lose a third less, a little over half, and a sixth of what the
-best plain sampling loses (README, "Scored on copies of the network").
+and rnn-a compute the accuracy from the weights and lose a little over a third, a little over half, and a sixth of
+what the best plain sampling loses (README, "Scored on copies of the network").
 
 **Held-out networks** are other networks of the same design, scored as they are. They stay in the report, where
 they say whether the locked estimator works beyond the run's network at all.

@@ -151,7 +151,7 @@ Measured under each pilot's settings (`python -m arcagent.report --config config
 
 | Network | Share, size | Copies' accuracy: mean, sd (points) | Its own accuracy, written in | The best number in hindsight | Best plain sampling (inputs) | Computed from the weights |
 | --- | --- | --- | ---: | ---: | ---: | --- |
-| lin-a-s0 | 1%, 1.19 | 0.928, 4.4 | -7.14e-03 | -1.92e-03 | -5.11e-04 (255) | -3.35e-04 sampling from a table; -4.85e-04 every input, exact |
+| lin-a-s0 | 1%, 1.19 | 0.928, 4.4 | -7.14e-03 | -1.92e-03 | -5.11e-04 (255) | -3.35e-04 sampling from a table; -4.85e-04 every input, exact; -3.03e-04 permutations from the table; -2.14e-04 every input with the rows that can win; -1.80e-04 the same with one fitted factor |
 | att-a-s0 | 1%, 2.38 | 0.948, 8.4 | -9.86e-03 | -7.10e-03 | -4.21e-04 (206) | -2.39e-04 every input, exact |
 | rnn-a-s2 | 40%, 0.5 | 0.949, 7.9 | -8.80e-03 | -6.20e-03 | -4.70e-04 (179) | -7.60e-05 exact |
 | rnn-b-s0 | 12.5%, 0.0398 | 0.930, 4.5 | -4.96e-03 | -2.00e-03 | -5.41e-04 (235) | none written yet |
@@ -160,11 +160,17 @@ Measured under each pilot's settings (`python -m arcagent.report --config config
 - **The number loses.** A network's own accuracy written in is 8 to 23 times worse than the best plain sampling,
   and the best number there could be for a scoring's copies (their mean accuracy, which nobody is told) about 4 to
   17 times. On rnn-g-s0 the constant 0.95, which beat everything on the network itself, scores -4.37e-03.
-- **There is a hill above sampling.** The last column is three estimators written for the report
+- **There is a hill above sampling.** The last column is estimators written for the report
   (`withheld/<model>/references.py`), each from how its network computes. For lin-a, the logits of an input are
   one column per token of the matrix `unembed hidden embed`: sampling from that table costs a third of a forward
   pass per input and loses a third less than plain sampling, and going through every pair exactly costs about
-  what plain sampling loses. For att-a, tables over single tokens give every input's logits exactly at 239
+  what plain sampling loses. Three more steps, in the order they were found: sampling whole permutations from the
+  table (every token equally often, so a changed column is not drawn by chance); going through every pair with
+  only the 4 highest rows of each token's column, since the output is nearly always one of them (never below the
+  accuracy, half a point above it, no draw); and the 3 highest rows with the error rate scaled by one factor
+  fitted on copies made in a sandbox, at 164 forward passes and a little over a third of plain sampling's loss.
+  That last factor is a number from brute force again, but on top of a count that follows the weights: alone it
+  would be the constant that loses. For att-a, tables over single tokens give every input's logits exactly at 239
   forward passes, a little over half of plain sampling's loss. rnn-a has no biases, so its output depends on the
   input's direction only, and along the sides of a square its logits are linear between the points where a unit
   switches: the accuracy to 2e-5 on every copy at 75 forward passes, a sixth of plain sampling's loss. None of
