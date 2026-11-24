@@ -162,11 +162,56 @@ told the task, the data set and the network, but not the network's accuracy, whi
 comes from (the hygiene check searches everything the agent can reach for the accuracies and the names that would
 lead to published figures, before every prompt).
 
+## The models
+
+Twenty models, each a folder `models/<name>/`: the network written in the estimator language on a batch of inputs
+(`model.py`), the task (`task.py`), the data set and the task in the words the agent is told (`config.yaml`), and
+the networks' weights (`zoo/`). Each has a pilot, `config/pilot/<name>.yaml`, whose held-out networks are the
+model's others, and a one-round `-smoke` version of it. rnn-g and rnn-b came first; the other eighteen are
+[Mech-Interp-Agent-level1](https://github.com/WFJKK/Mech-Interp-Agent-level1)'s models (commit `bee70fb`), the same
+networks byte for byte. Their forward passes cost what they cost there, and give level 1's outputs on 400 inputs of
+each of its 66 networks (checked once against level 1's own code; `tests/test_models.py` keeps a numpy version of
+each architecture). The same networks of 16 units that level 1 ran as rnn-c are rnn-g-z0 to z4 here, with a pilot
+on z2 (`config/pilot/rnn-g-z2.yaml`).
+
+Accuracies are the verifier's own: exact where the data set can be listed in 2,097,152 inputs (every input, each
+weighted by how often it is drawn), otherwise on 2,097,152 inputs drawn with seed 20261124. F is a forward pass in
+operations.
+
+| Model | Network | Data set | The task's answer | F | Accuracy of each network, the run's first | Where the networks come from |
+| --- | --- | --- | --- | ---: | --- | --- |
+| rnn-g | recurrent, 16 units | 10 real numbers | position of the 2nd largest | 2,937 | s0: 0.953, 0.910, 0.880, 0.949, 0.932, 0.890, 0.945, 0.846, 0.694 | AlgZoo: s0 the challenge network; z0 to z4 the zoo's five seeds; n1 to n3 s0 with noise |
+| rnn-b | recurrent, 4 units | 3 real numbers | position of the 2nd largest | 78 | s0: 0.985, 0.945, 0.893, 0.759, 0.904 | AlgZoo, five seeds |
+| rnn-a | recurrent, 2 units | 2 real numbers | position of the smaller | 19 | s2: 0.99992, 0.99989, 0.875, 0.500, 0.500 | AlgZoo, five seeds; s0 and s4 learned nothing |
+| rnn-d | recurrent, 2 units | 2 real numbers | position of the smaller | 19 | s2: 0.276, 0.252, 0.500, 0.479, 0.500 | untrained: rnn-a's starting states |
+| rnn-e | recurrent, 4 units | 3 real numbers | position of the 2nd largest | 78 | s0: 0.381, 0.380, 0.393, 0.325, 0.417 | untrained: rnn-b's starting states |
+| rnn-f | recurrent, 16 units | 10 real numbers | position of the 2nd largest | 2,937 | s2: 0.134, 0.121, 0.091, 0.122, 0.101 | untrained: the starting states of rnn-g's z0 to z4 |
+| lin-a | linear, width 8 | 2 tokens: all 4,096 inputs | the larger | 655 | s0: 4,095 and 4,092 of 4,096 inputs (exact) | Compact-Proof-Agent's max2 networks |
+| lin-a-1to4 | linear, width 8 | 1 to 4 tokens | the largest | 671 | s0: 0.842, 0.824 | lin-a's networks, trained on 2 tokens only |
+| lin-b | linear, width 8 | 1 to 8 tokens | the largest | 703 | s0: 0.945, 0.945 | trained in level 1 on 4 tokens |
+| lin-b-4 | linear, width 8 | 4 tokens | the largest | 671 | s0: 0.998, 0.998 | lin-b's networks, on what they were trained on |
+| lin-c | linear, width 8 | 1 to 4 tokens | the smallest | 671 | s0: 0.837, 0.855 | trained in level 1 on 2 tokens |
+| lin-d | linear, width 8 | 1 to 8 tokens | the smallest | 703 | s0: 0.945, 0.952 | trained in level 1 on 4 tokens |
+| lin-e | linear, width 8 | 1 to 4 tokens | the smallest | 671 | s0: 0.007, 0.016, 0.024, 0.029, 0.011, 0.006 | untrained: lin-c's starting states |
+| lin-f | linear, width 8 | 1 to 8 tokens | the smallest | 703 | s0: 0.011, 0.027, 0.009, 0.007, 0.016, 0.004 | untrained: lin-d's starting states |
+| lin-f-4 | linear, width 8 | 4 tokens | the largest | 671 | s0: 0.014, 0.010, 0.019, 0.022, 0.025, 0.008 | untrained: lin-f's networks |
+| att-a | attention, 1 layer, 1 head, width 32 | 1 or 2 tokens: all 4,160 inputs | the largest | 8,621 | s0: 1, 1 (exact: every input) | Compact-Proof-Agent's attn-max2 (Gross et al.) |
+| att-b | attention, 1 layer, 1 head, width 32 | 1 or 2 tokens: all 4,160 inputs | the smallest | 8,621 | s0: 1, 1 (exact: every input) | Compact-Proof-Agent's attn-min2 |
+| att-c | attention, 1 layer, 1 head, width 32 | 1 to 4 tokens | the largest | 12,987 | s0: 0.765, 0.914 | Compact-Proof-Agent's attn-max4, trained on 4 tokens |
+| att-d | attention, 1 layer, 1 head, width 32 | 1 to 4 tokens | the smallest | 12,987 | s0: 0.866, 0.597 | trained in level 1 on 4 tokens |
+| att-e | attention, 1 layer, 1 head, width 32 | 1 to 4 tokens | the largest | 12,987 | s0: 0.013, 0.027, 0.014, 0.020, 0.024, 0.022 | untrained: att-d's starting states |
+
+Data sets of tokens hold a number of tokens drawn first, each count as likely as any other, then the tokens, each a
+whole number from 0 to 63; the slots past the last token hold the empty value 64. The task is told to the agent;
+what it is not told is the column on the right, nor the numbers before it. The untrained models are baselines: a
+run there is a usual run in everything the agent is given, with nothing learned to find. The fuller record of each
+model is in `withheld/<name>/task.yaml` here and in level 1.
+
 ## Results
 
-No agent has run yet. The pilot is ready: `config/pilot/rnn-g.yaml` (the challenge network, 8 held-out networks,
-5 rounds) and its one-round smoke test `config/pilot/rnn-g-smoke.yaml`. The reference numbers above are what any
-run will be read against.
+No agent has run yet. The pilots are ready: `config/pilot/rnn-g.yaml` (the challenge network, 8 held-out networks,
+5 rounds) with its one-round smoke test `config/pilot/rnn-g-smoke.yaml`, and one pilot with a smoke test for every
+other model. The reference numbers above are what any run will be read against.
 
 ## More implementation details
 
@@ -175,7 +220,10 @@ run will be read against.
 Prices are those of Mech-Interp-Agent-level1 (each operation on numbers costs 1, a matrix product 1 per
 multiply-add, a reduction over n entries n - 1, moving data nothing) with three additions: random draws (`normal`,
 `uniform`, `integers`, and `g.inputs(n)` for n inputs of the data set) at 1 per number drawn, `erf` and `power`.
-A forward pass of the 432-weight RNN is 2,937 operations, as in level 1. Two things are new:
+An input of a data set of varying lengths also costs what empties its slots past the last token (a comparison and
+a where per slot, and one operation for the number of tokens). `take_sum`, a matrix applied to a sum of one-hot
+vectors, takes a batch of index vectors at once, so a linear network runs on a batch at level 1's price per input.
+Every forward pass costs what it does in level 1 (2,937 operations for the 432-weight RNN). Two things are new:
 
 - **Runs.** Every random node draws from its own stream of the run's seed, so a run is reproducible from its seed
   and two scorings never share draws. Work that depends on no draw is the same in every run; the interpreter
@@ -188,8 +236,10 @@ A forward pass of the 432-weight RNN is 2,937 operations, as in level 1. Two thi
 
 For one network (`arcagent/verifier.py`):
 
-1. $A$: the network on 2,097,152 inputs drawn with seed 20261124, 32,768 at a time, through the same interpreter
-   (`Model.accuracy`; about 4 seconds). Measured once per run folder (`references.jsonl`).
+1. $A$: the network on 2,097,152 inputs drawn with seed 20261124, 32,768 at a time (16,384 for the attention
+   networks, which say `max_batch`), through the same interpreter (`Model.accuracy`; 0.2 to 6 seconds). A data set
+   with at most that many inputs (lin-a's 4,096, att-a's and att-b's 4,160) is measured exactly instead, every
+   input weighted by how often it is drawn. Measured once per run folder (`references.jsonl`).
 2. The estimator, 4,096 times, run k with seed `[seed, k]`; `seed` drawn afresh for each scoring.
 3. The parts: mean squared error, bias, spread, mean and range of the cost, draws per run; the reward; the
    benchmark. A scoring of a 100-pass estimator takes a few seconds.
@@ -218,7 +268,7 @@ it besides the saved estimators.
 
     pip install -r requirements.txt
     python -m pytest                  # under a minute; no model is called
-    python -m pytest -m slow          # the recorded accuracies of all nine rnn-g networks, under a minute more
+    python -m pytest -m slow          # the recorded accuracies of the larger models' networks, about two minutes
 
 No GPU is needed: everything runs in numpy on a laptop, the networks included.
 
@@ -229,6 +279,7 @@ Start small. The smoke runs take one short round each:
     python -m arcagent.loop run --config config/pilot/rnn-b-smoke.yaml    # a 32-weight network: checks the install
     python -m arcagent.loop run --config config/pilot/rnn-g-smoke.yaml    # the challenge network, one round
     python -m arcagent.loop run --config config/pilot/rnn-g.yaml          # the pilot: 5 rounds, 8 held-out networks
+    python -m arcagent.loop run --config config/pilot/att-c-smoke.yaml    # any other model: its smoke test first
 
 Without `--auth api_key` a run uses your own Claude Code login (`claude` must be installed and logged in). Every
 run can be tried first with scripted rounds and no model at all: `--fake tests/fake_run`.
@@ -296,6 +347,8 @@ of the others). Every run starts by trying real escapes in the chosen mode. `doc
 | `arcagent/budget.py`, `run_config.py`, `mcp_server.py`, `util.py` | API budget, configs, the tool server, helpers |
 | `models/rnn-g/` | the 432-weight challenge network and its held-out networks |
 | `models/rnn-b/` | a 32-weight network of the same family, for smoke runs and tests |
+| `models/lin-*`, `att-*`, `rnn-a`, `rnn-d`, `rnn-e`, `rnn-f` | level 1's other models (see "The models") |
+| `config/pilot/` | a pilot and a smoke test for every model; `base.yaml` is what they share |
 | `withheld/` | what the agent must not see: accuracies, provenance, AlgZoo's original files, reference estimators |
 | `config/` | defaults and the pilot configs |
 | `docs/DESIGN.md`, `docs/REWARD.md`, `docs/SANDBOX.md` | the design, the reward and its gaming routes, the sandbox |

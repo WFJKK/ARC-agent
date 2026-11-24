@@ -6,9 +6,12 @@ agent is told the task: an accuracy means nothing without it, so `models/<name>/
 estimator language and `config.yaml` in words. What is withheld is the answer and the way to it:
 
 - how often each network gives the task's answer (the verifier measures it itself, on 2,097,152 inputs of its
-  own, and the agent never sees that number);
+  own or on every input of a data set that has no more, and the agent never sees that number);
 - which network is which: the run's network is one of several, and the others are held out for the report;
-- the names that lead to published figures (the source of the networks and its write-up).
+- where the networks come from: how they were made, which inputs they were trained on, or that they were never
+  trained, and the names that lead to published figures (the source of the networks and its write-up).
+
+Every model has a `task.yaml` here with the verifier's accuracy of each of its networks. rnn-g and rnn-b:
 
 | Model | Networks | Accuracy (verifier, 2^21 inputs) |
 | --- | --- | --- |
@@ -17,7 +20,12 @@ estimator language and `config.yaml` in words. What is withheld is the answer an
 | rnn-g | n1 to n3: s0 with noise of 0.2%, 0.5% and 1% of each matrix's RMS | 0.945, 0.846, 0.694 |
 | rnn-b | s0 to s4: AlgZoo's networks of hidden size 4 on three numbers | 0.985, 0.893, 0.759, 0.904, 0.945 |
 
-- `rnn/`: AlgZoo's original files and the converter that reads them without running them.
-- `<model>/task.yaml`: the full record, with the strings the hygiene check looks for.
+The other eighteen are Mech-Interp-Agent-level1's models (commit `bee70fb`), the same files: the README's table of
+models has each one's accuracies and origin, and level 1's `withheld/<model>/task.yaml` the whole record (training
+recipes and curves, where a network differs from the task, how often it gives each answer).
+
+- `rnn/`: AlgZoo's original files and the converter that reads them without running them; rnn-a, rnn-d, rnn-e and
+  rnn-f come from the same folder (the untrained ones are AlgZoo's saved starting states).
+- `<model>/task.yaml`: the record, with the strings the hygiene check looks for.
 - `<model>/references.py`: reference estimators for the report.
 - `rnn-g/noise.py`: how the noised networks were made.

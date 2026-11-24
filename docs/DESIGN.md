@@ -28,11 +28,13 @@ counted.
 `agent_docs/ESTIMATOR.md`): level 1's `prices-v1` with three additions. Random draws cost 1 per number drawn; `erf`
 (for Gaussian probabilities, `lang.normal_cdf`) and `power` cost 1 per entry like the other elementwise
 operations. The network is written in the same language (`models/<name>/model.py`, on a batch of inputs), so a
-forward pass and an estimator are priced by one list. For the 432-weight RNN a forward pass is 2,937 operations,
-the same as in level 1.
+forward pass and an estimator are priced by one list. Every network's forward pass costs what it costs in level 1
+(2,937 operations for the 432-weight RNN). For that, `take_sum` (a matrix applied to a sum of one-hot vectors) takes
+a batch of index vectors, one sum per vector at the price of one.
 
 **Random draws.** `g.normal(shape)`, `g.uniform(shape)`, `g.integers(high, shape)` and `g.inputs(n)` each make a
-random node with a stream number of its own. In the run whose seed is the list S, the node with stream s draws from
+random node with a stream number of its own (an input with a varying number of tokens makes two: the tokens, then
+their number, and the slots past the last token are emptied by a comparison and a where per slot). In the run whose seed is the list S, the node with stream s draws from
 `numpy.random.default_rng(S + [s])`. Within one run a node is computed once, so two uses of it see the same draws;
 two nodes are independent.
 
@@ -56,14 +58,24 @@ in `withheld/<name>/`: how often each network gives the task's answer, which net
 from, the strings the hygiene check looks for, and reference estimators.
 
 **The task is told.** Level 1 never told the agent what the network was trained to do. Here an accuracy means
-nothing without the task, so `task.py` and `task.says` state it. What is withheld instead is the answer (A) and
-the route to published figures.
+nothing without the task, so `task.py` and `task.says` state it, as a task: an answer for every input, with no word
+on whether the network was trained for it, or on which inputs. What is withheld is the answer (A), where the
+networks come from (how they were made, what they were trained on, if anything) and the route to published
+figures.
+
+**Data sets.** Three kinds (`lang.KINDS`): `all`, every combination of one token per position; `lengths`, a
+number of tokens drawn first from a list, each as likely as the others, then the tokens, filling the first slots,
+with the rest empty; `normal`, real numbers drawn from the standard normal distribution. A model may say
+`max_batch`, the most inputs it is run on at once (the attention networks: 16,384, so that a batch's vectors stay
+within the limit per value).
 
 `arcagent/verifier.py` is the only judge. Given an estimator, it
 
 1. checks that it is an estimator (shape, operations, limits) and refuses it with the reason if not;
 2. measures A once: the network on `verifier.reference_inputs` (2,097,152) inputs drawn with
-   `verifier.reference_seed`, through the same interpreter (`networks.Model.accuracy`), kept in the run folder;
+   `verifier.reference_seed`, through the same interpreter (`networks.Model.accuracy`), kept in the run folder; a
+   data set with at most that many inputs is measured exactly instead, on every input, each weighted by how often
+   it is drawn (method `exact`);
 3. runs the estimator `verifier.runs` (4,096) times, run k with the seed `[seed, k]` for a seed drawn afresh from the
    operating system for each scoring; an estimator that draws nothing is run once and repeated;
 4. returns a receipt: the parts (mean squared error, bias, spread, mean and range of the cost, draws), the reward
@@ -71,7 +83,7 @@ the route to published figures.
    under the reward).
 
 One more sampled input costs plain sampling S operations: the draws of one input, a forward pass, the task's answer
-and a comparison (`Model.sample_ops`; 2,989 for the RNN). The benchmark uses that price.
+and a comparison (`Model.sample_ops`; 2,989 for the 432-weight RNN). The benchmark uses that price.
 
 ## 4. The agent's session
 
@@ -92,7 +104,9 @@ run's estimate and cost (`runs.npz`).
 
 **What reaches the agent.** The prompt, the tools' descriptions and the files of its sandbox folder are searched
 for the run config's and the model's forbidden strings (`arcagent/hygiene.py`) before the run starts and before
-every prompt: the accuracies of the model's networks as numbers, and the names that lead to the published figures.
+every prompt: the accuracies of the model's networks as numbers, the words that would say how the networks were
+made, and the names that lead to the published figures. The tests also check that nothing the agent reaches
+mentions training at all.
 The sandbox keeps the agent's code from the repository, the withheld folder, the held-out networks' weights and the
 run folder.
 
@@ -135,15 +149,20 @@ report from the records alone, and never measures again what it measured before.
 
 ## 8. Adding a model
 
-1. `models/<name>/config.yaml`: sizes, the input space, the data set and the task with their sentences, the weights'
-   names and shapes, the networks (id, file, sha256).
+1. `models/<name>/config.yaml`: sizes, the input space, the data set (one of the three kinds) and the task with
+   their sentences, the weights' names and shapes, the networks (id, file, sha256), and `max_batch` if a batch of
+   32,768 inputs would be too large. Its comments say nothing of where the networks come from.
 2. `models/<name>/model.py`: `logits(g, lang, x)` and `forward(g, lang, x)` on a batch. Every input must cost the same
    (checked on batches of 1, 2 and 5).
-3. `models/<name>/task.py`: `answer(g, lang, x)` on a batch.
+3. `models/<name>/task.py`: `answer(g, lang, x)` on a batch, with its price per input in its docstring (the guide
+   points the agent there).
 4. `models/<name>/zoo/*.npz`: the weights, saved without pickle.
-5. `withheld/<name>/task.yaml`: provenance, the verifier's accuracy of each network, and the hygiene strings (each
-   accuracy as `0.xxx` and `xx.x%`; `tests/test_hygiene.py` checks they are there). Optionally `references.py`.
-6. A run config next to `config/pilot/rnn-g.yaml`, with its held-out networks, and a smoke config to try first.
+5. `withheld/<name>/task.yaml`: provenance, the verifier's accuracy of each network, and the hygiene strings: each
+   accuracy to four places and as a percent to two, and where they do not round to 1, to three places and to one;
+   `tests/test_hygiene.py` checks the check would catch every form. Optionally `references.py`.
+6. A pilot in `config/pilot/<name>.yaml` with its held-out networks, and a `-smoke` version to try first.
+7. The model's prices and task in `tests/test_models.py` (`PRICES`, `TASKS`), with a numpy version of a new
+   architecture.
 
 ## 9. Defaults, and where to change them
 
@@ -151,7 +170,7 @@ report from the records alone, and never measures again what it measured before.
 | --- | --- | --- |
 | Reward | `r_lambda`, lambda = 1e-6 | `config/defaults.yaml`, `reward` |
 | Runs per scoring | 4,096 | `verifier.runs` |
-| A | 2,097,152 inputs, seed 20261124 | `verifier.reference_inputs`, `reference_seed` |
+| A | 2,097,152 inputs, seed 20261124; every input where the data set has no more | `verifier.reference_inputs`, `reference_seed` |
 | Time per scoring | 600 s for all the runs | `verifier.time_limit_s` |
 | Estimator limits | 400 nodes, 256 numbers in constants | `entry` |
 | Rounds | at most 5, patience 2 | `rounds_max`, `patience` |
