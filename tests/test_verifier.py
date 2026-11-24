@@ -82,7 +82,7 @@ def test_what_the_agent_is_shown(model, ver):
                       "cost_max", "estimate_mean", "estimate_std", "random_draws_per_run", "uses_random_draws"}
     text = str(v)
     assert str(round(r["parts"]["accuracy"], 6)) not in text and "bias" not in text and "benchmark" not in text
-    assert "rms error" in describe(r) and "lower mse than sampling" in describe(r)
+    assert "rms error" in describe(r) and "sampling's at that cost" in describe(r)
 
 
 def test_refusals_say_why(model, ver):

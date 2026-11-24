@@ -169,7 +169,8 @@ def describe(receipt: dict) -> str:
             f"cost {p['cost']:.2f} F  over {p['runs']} runs")
     b = receipt.get("benchmark") or {}
     if b.get("mse_reduction") is not None:
-        line += f"  ({100 * b['mse_reduction']:.1f}% lower mse than sampling at that cost)"
+        red = 100 * b["mse_reduction"]
+        line += f"  (mse {abs(red):.1f}% {'below' if red >= 0 else 'above'} sampling's at that cost)"
     return line
 
 

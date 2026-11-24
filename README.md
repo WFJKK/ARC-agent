@@ -217,8 +217,8 @@ it besides the saved estimators.
 ### Install
 
     pip install -r requirements.txt
-    python -m pytest                  # about two minutes; no model is called
-    python -m pytest -m slow          # the recorded accuracies of all nine rnn-g networks, about a minute more
+    python -m pytest                  # under a minute; no model is called
+    python -m pytest -m slow          # the recorded accuracies of all nine rnn-g networks, under a minute more
 
 No GPU is needed: everything runs in numpy on a laptop, the networks included.
 

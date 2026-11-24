@@ -38,6 +38,11 @@ def _reward(cfg: dict) -> str:
     return f"`{cfg.get('name', 'r_lambda')}`" + (f", {params}" if params else "")
 
 
+def _in_order(networks: dict, order: list) -> list:
+    """The networks of a record in the run config's order (records are written with their keys sorted)."""
+    return [n for n in order if n in networks] + sorted(n for n in networks if n not in order)
+
+
 def frontier(rows: list) -> set:
     """The rows no other row beats on both mean squared error and cost (lower is better on both)."""
     out = set()
@@ -164,7 +169,8 @@ def write(path: Path) -> dict:
             head = ["network", "accuracy", "estimate (mean)", "error (pp)", "rms error (pp)", "cost", "reward",
                     "sampling at that cost: rms (pp)", "a constant of the run's accuracy: reward"]
             lines += ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
-            for n, r in check["networks"].items():
+            for n in _in_order(check["networks"], [net] + d["nets"]):
+                r = check["networks"][n]
                 An = refs.get(n, {}).get("accuracy")
                 if r.get("status") != "scored":
                     lines.append(f"| {n} | {An} | refused: {str(r.get('reason'))[:60]} | | | | | | |")
@@ -187,8 +193,8 @@ def write(path: Path) -> dict:
         lines += ["## Reference estimators", "", "The withheld references and plain sampling, under the run's conditions "
                   f"(seed {rs['seed']}).", ""]
         rows = []
-        for n, scores in rs["networks"].items():
-            for r in scores:
+        for n in _in_order(rs["networks"], [net] + d["nets"]):
+            for r in rs["networks"][n]:
                 rows.append(_row(f"{r['name']} on {n}", r))
         lines += _table(rows)
         lines.append("")

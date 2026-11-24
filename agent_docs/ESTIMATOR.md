@@ -20,6 +20,9 @@ r = run(e, runs=200)               # 200 runs as the verifier runs them: r["esti
 print(r["estimates"].mean(), r["estimates"].std(), r["cost"].mean())
 ```
 
+For exploring in plain numpy, `weights` holds the weights as arrays, `sample(n, seed)` draws inputs
+from the data set and `outputs(x)` gives the network's outputs and the task's answers on them.
+
 Every expression is also computed in an example run while you build (seed 0, or `graph(seed=...)`),
 so `x.shape` and `x.value` exist and a wrong shape fails at the line that makes it.
 `lang.Graph.load(e, weights, info["data_set"], info["input_space"])` opens a saved estimator again and
