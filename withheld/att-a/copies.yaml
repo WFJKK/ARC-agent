@@ -1,0 +1,115 @@
+# Withheld from the agent, like everything here: how the copies of each run network are made (the share and the size
+# are in its pilot config, and the agent is told them) and what python -m arcagent.calibrate measured on the way,
+# which says how often the copies give the task's answer. 24 November 2026.
+att-a-s0:
+  share: 0.01
+  size: 2.38
+  weights: 8256
+  rule: variance of the copies' accuracies at least 4 times the best plain sampling's loss, lambda 1e-06
+  inputs_per_copy: 32768
+  coarse:
+  - size: 0.02
+    copies: 32
+    mean: 1.0
+    sd: 0.0
+    q10: 1.0
+    median: 1.0
+    q90: 1.0
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.05
+    copies: 32
+    mean: 1.0
+    sd: 0.0
+    q10: 1.0
+    median: 1.0
+    q90: 1.0
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.1
+    copies: 32
+    mean: 1.0
+    sd: 0.0
+    q10: 1.0
+    median: 1.0
+    q90: 1.0
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.2
+    copies: 32
+    mean: 1.0
+    sd: 0.0001
+    q10: 0.9999
+    median: 1.0
+    q90: 1.0
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.5
+    copies: 32
+    mean: 0.9987
+    sd: 0.0041
+    q10: 0.9988
+    median: 0.9998
+    q90: 1.0
+    variance_over_best_sampling_loss: 0.23
+  - size: 1.0
+    copies: 32
+    mean: 0.9968
+    sd: 0.0047
+    q10: 0.9966
+    median: 0.998
+    q90: 0.9991
+    variance_over_best_sampling_loss: 0.2
+  - size: 2.0
+    copies: 32
+    mean: 0.9743
+    sd: 0.0339
+    q10: 0.9566
+    median: 0.9849
+    q90: 0.9949
+    variance_over_best_sampling_loss: 3.72
+  - size: 4.0
+    copies: 32
+    mean: 0.7722
+    sd: 0.1992
+    q10: 0.396
+    median: 0.8539
+    q90: 0.9536
+    variance_over_best_sampling_loss: 53.73
+  fine:
+  - size: 2.38
+    copies: 128
+    mean: 0.9418
+    sd: 0.081
+    q10: 0.8659
+    median: 0.9706
+    q90: 0.9923
+    variance_over_best_sampling_loss: 14.94
+  - size: 2.83
+    copies: 128
+    mean: 0.9187
+    sd: 0.11
+    q10: 0.8561
+    median: 0.9513
+    q90: 0.9847
+    variance_over_best_sampling_loss: 24.15
+  - size: 3.36
+    copies: 128
+    mean: 0.8621
+    sd: 0.1369
+    q10: 0.7203
+    median: 0.9135
+    q90: 0.9552
+    variance_over_best_sampling_loss: 29.58
+  - size: 4.0
+    copies: 128
+    mean: 0.794
+    sd: 0.1594
+    q10: 0.6168
+    median: 0.8387
+    q90: 0.9402
+    variance_over_best_sampling_loss: 34.13
+  - size: 4.76
+    copies: 128
+    mean: 0.7311
+    sd: 0.143
+    q10: 0.5698
+    median: 0.7665
+    q90: 0.8678
+    variance_over_best_sampling_loss: 24.34

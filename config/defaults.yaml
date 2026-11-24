@@ -51,6 +51,16 @@ verifier:
   reference_seed: 20261124            # ... drawn with this seed
   reference_chunk: 32768              # ... this many at a time
   time_limit_s: 600                   # for all the runs of one scoring together
+  # Scoring on copies of the network (arcagent/measure.py; docs/REWARD.md): what stops a number that was measured on
+  # the network and written into an estimator. Every scoring makes its own copies, each with a few weights
+  # changed at random, and a run's error is its estimate less the accuracy of the copy it ran on.
+  copies:
+    count: 128                        # copies per scoring; 0: score on the network itself, as before
+    runs: 32                          # runs of the estimator on each copy (count x runs = 4,096 runs)
+    reference_inputs: 65536           # each copy's accuracy is measured on this many inputs (all, where there are no more)
+    share: null                       # the probability that a weight is changed ...
+    size: null                        # ... by a normal draw of this many times its matrix's root mean square.
+                                      # Both are a network's own: its pilot config sets them (python -m arcagent.calibrate)
 
 # what an estimator may hold
 entry:

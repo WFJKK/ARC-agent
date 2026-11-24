@@ -1,9 +1,7 @@
 # The cheapest run of the whole loop: rnn-b, a 32-weight network on three real numbers, 78 operations per forward
 # pass; one short round. For checking an installation, a sandbox or the Claude Code login, not for results.
-extends: base.yaml
+extends: rnn-b.yaml
 run_id: pilot-rnn-b-smoke
-model: models/rnn-b
-network: rnn-b-s0
 rounds_max: 1
 session:
   python_calls: 8

@@ -1,0 +1,123 @@
+# Withheld from the agent, like everything here: how the copies of each run network are made (the share and the size
+# are in its pilot config, and the agent is told them) and what python -m arcagent.calibrate measured on the way,
+# which says how often the copies give the task's answer. 24 November 2026.
+rnn-g-z2:
+  share: 0.01
+  size: 0.0119
+  weights: 432
+  rule: variance of the copies' accuracies at least 4 times the best plain sampling's loss, lambda 1e-06
+  inputs_per_copy: 32768
+  coarse:
+  - size: 0.02
+    copies: 32
+    mean: 0.813
+    sd: 0.1368
+    q10: 0.603
+    median: 0.8552
+    q90: 0.9402
+    variance_over_best_sampling_loss: 25.41
+  fine:
+  - size: 0.0119
+    copies: 128
+    mean: 0.8849
+    sd: 0.0722
+    q10: 0.7826
+    median: 0.9194
+    q90: 0.9469
+    variance_over_best_sampling_loss: 8.3
+  - size: 0.0141
+    copies: 128
+    mean: 0.8748
+    sd: 0.0848
+    q10: 0.7537
+    median: 0.9086
+    q90: 0.9446
+    variance_over_best_sampling_loss: 11.13
+  - size: 0.0168
+    copies: 128
+    mean: 0.8533
+    sd: 0.093
+    q10: 0.7046
+    median: 0.8833
+    q90: 0.9429
+    variance_over_best_sampling_loss: 12.56
+  - size: 0.02
+    copies: 128
+    mean: 0.8254
+    sd: 0.1264
+    q10: 0.6711
+    median: 0.8643
+    q90: 0.9443
+    variance_over_best_sampling_loss: 22.13
+  - size: 0.0238
+    copies: 128
+    mean: 0.804
+    sd: 0.1377
+    q10: 0.5906
+    median: 0.8568
+    q90: 0.9421
+    variance_over_best_sampling_loss: 25.26
+rnn-g-s0:
+  share: 0.01
+  size: 0.0398
+  weights: 432
+  rule: variance of the copies' accuracies at least 4 times the best plain sampling's loss, lambda 1e-06
+  inputs_per_copy: 32768
+  coarse:
+  - size: 0.02
+    copies: 32
+    mean: 0.9379
+    sd: 0.0352
+    q10: 0.9176
+    median: 0.9512
+    q90: 0.9548
+    variance_over_best_sampling_loss: 2.57
+  - size: 0.05
+    copies: 32
+    mean: 0.9208
+    sd: 0.0488
+    q10: 0.8643
+    median: 0.9384
+    q90: 0.953
+    variance_over_best_sampling_loss: 4.45
+  fine:
+  - size: 0.0251
+    copies: 128
+    mean: 0.9397
+    sd: 0.0286
+    q10: 0.9162
+    median: 0.9503
+    q90: 0.9545
+    variance_over_best_sampling_loss: 1.72
+  - size: 0.0316
+    copies: 128
+    mean: 0.9293
+    sd: 0.0403
+    q10: 0.8734
+    median: 0.9451
+    q90: 0.9535
+    variance_over_best_sampling_loss: 3.17
+  - size: 0.0398
+    copies: 128
+    mean: 0.9196
+    sd: 0.0545
+    q10: 0.8548
+    median: 0.9415
+    q90: 0.9538
+    variance_over_best_sampling_loss: 5.52
+  - size: 0.05
+    copies: 128
+    mean: 0.9083
+    sd: 0.0613
+    q10: 0.8201
+    median: 0.9348
+    q90: 0.9516
+    variance_over_best_sampling_loss: 6.61
+  - size: 0.0629
+    copies: 128
+    mean: 0.8834
+    sd: 0.0934
+    q10: 0.7273
+    median: 0.9212
+    q90: 0.9527
+    variance_over_best_sampling_loss: 14.08

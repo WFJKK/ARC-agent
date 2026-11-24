@@ -7,7 +7,10 @@
 A run's report gives the network's accuracy as the verifier measured it, every submission with its parts, the
 locked estimator scored again with a fresh seed, the locked estimator on every held-out network, the reference
 estimators and plain sampling under the same conditions, and the agent's closing notes. It marks the submissions on
-the frontier of mean squared error and cost, which needs no lambda.
+the frontier of mean squared error and cost, which needs no lambda. For a run scored on copies of the network
+(verifier.copies) it says how the copies are made, gives the spread of the estimates within a copy and how well they
+follow the copies' accuracies, and adds the locked estimator on the network itself and what a number written into
+an estimator would have scored on the copies.
 """
 
 from __future__ import annotations
@@ -62,23 +65,39 @@ def frontier(rows: list) -> set:
     return out
 
 
-def _row(label: str, r: dict) -> list:
+def _row(label: str, r: dict, copies: bool = False) -> list:
+    """One scoring as a row of a table. copies: the table has the column of a scoring on copies, which is empty for
+    a scoring on a network itself."""
     if r.get("status") != "scored":
-        return [label, f"refused: {str(r.get('reason'))[:80]}", "", "", "", "", "", ""]
+        return [label, f"refused: {str(r.get('reason'))[:80]}"] + [""] * (len(_head(copies)) - 2)
     p, b = r["parts"], r.get("benchmark") or {}
     red = b.get("mse_reduction")
-    return [label, _e(r["reward"]), _pp(p["rms_error"]), f"{100 * p['bias']:+.3f}", _pp(p["estimate_std"]), _c(p["cost"]),
-            "" if red is None else f"{100 * red:.1f}%", "yes" if p["random"] else "no"]
+    row = [label, _e(r["reward"]), _pp(p["rms_error"]), f"{100 * p['bias']:+.3f}", _pp(p["estimate_std"]), _c(p["cost"]),
+           "" if red is None else f"{100 * red:.1f}%", "yes" if p["random"] else "no"]
+    if copies:
+        t = p.get("tracking")
+        row.insert(5, ("" if "copies" not in p else "none" if t is None else f"{t:.3f}"))
+    return row
 
 
 HEAD = ["", "reward", "rms error (pp)", "bias (pp)", "spread (pp)", "cost (forward passes)",
         "mse below sampling's at that cost", "draws"]
 
 
-def _table(rows: list) -> list:
-    out = ["| " + " | ".join(HEAD) + " |", "|" + " --- |" * len(HEAD)]
+def _head(copies: bool = False) -> list:
+    return HEAD[:5] + ["follows the copies"] + HEAD[5:] if copies else HEAD
+
+
+def _table(rows: list, copies: bool = False) -> list:
+    head = _head(copies)
+    out = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
     out += ["| " + " | ".join(r) + " |" for r in rows]
     return out
+
+
+COPIES_NOTE = ("On copies, the error of a run is its estimate less the accuracy of the copy it ran on, spread is the standard "
+               "deviation of the estimates within a copy, and \"follows the copies\" is the correlation between a copy's mean "
+               "estimate and its accuracy: near 1 for an estimator that computes from the weights, none for a number written in.")
 
 
 def gather(path: Path) -> dict:
@@ -130,14 +149,27 @@ def write(path: Path) -> dict:
     refs = d["references"]
     net = cfg["network"]
     A = refs.get(net, {}).get("accuracy")
+    from .measure import copies_spec
+
+    spec = copies_spec((cfg.get("verifier") or {}).get("copies"))
+    on = spec is not None
+    per = (f"every scoring on {spec['count']:,} copies of the network, {spec['runs']:,} runs on each" if on
+           else f"{int(cfg['verifier']['runs']):,} runs per scoring")
     lines = [f"# Run {cfg['run_id']}", ""]
     lines += [f"- Model `{cfg['model']}`, network `{net}`; agent `{cfg.get('agent_model')}` (effort {cfg.get('effort')}), "
               f"backend {cfg['backend']}; sandbox {run['sandbox']['mode']}.",
-              f"- Reward {_reward(cfg['reward'])}; {int(cfg['verifier']['runs']):,} runs per scoring; a forward pass is "
+              f"- Reward {_reward(cfg['reward'])}; {per}; a forward pass is "
               f"{run['forward_ops']:,} operations, one more sampled input {run['sample_ops']:,} ({run['sample_ops'] / run['forward_ops']:.4f} "
               f"forward passes).",
               f"- The network's accuracy as the verifier measured it: {A:.6f} {_how(refs[net])}. The agent is not shown it."
-              if A is not None else "- The network's accuracy: not measured.", ""]
+              if A is not None else "- The network's accuracy: not measured."]
+    if on:
+        lines += [f"- Scored on copies: for every scoring the verifier makes {spec['count']:,} copies of the network afresh, each "
+                  f"weight changed with probability {spec['share']:g} by a normal draw of {spec['size']:g} times the root mean "
+                  f"square of its matrix, and measures each copy's accuracy on {spec['reference_inputs']:,} inputs (every "
+                  "input where the data set has no more). The agent is told how a copy is made and never sees one of the "
+                  "verifier's."]
+    lines.append("")
 
     # the submissions
     lines += ["## Submissions", ""]
@@ -146,17 +178,17 @@ def write(path: Path) -> dict:
         hs = d["heldout_scores"].get(s["carried_as"], {})
         ok = [x for x in hs.values() if x["status"] == "scored"]
         mean_held = sum(x["reward"] for x in ok) / len(ok) if ok else None
-        rows.append(_row(f"{s['carried_as']} `{s['name']}`", s) + [_e(mean_held)])
+        rows.append(_row(f"{s['carried_as']} `{s['name']}`", s, on) + [_e(mean_held)])
         frows.append({"mse": s["parts"]["mse"], "cost": s["parts"]["cost"]})
     on_front = frontier(frows)
     if rows:
-        head = HEAD + ["mean reward held out"]
+        head = _head(on) + ["mean reward held out"]
         lines += ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
         lines += ["| " + " | ".join(r[:1] + [r[1] + (" *" if i in on_front else "")] + r[2:]) + " |" for i, r in enumerate(rows)]
         lines += ["", "\\* on the frontier of mean squared error and cost. Bias is the mean estimate less the accuracy; spread is "
                   "the standard deviation of the estimates over the runs. Held out: every submission scored on every "
                   f"held-out network with {int((cfg.get('heldout') or {}).get('runs') or 0):,} runs and one fixed seed per "
-                  "network; the agent never sees these.", ""]
+                  "network; the agent never sees these." + (" " + COPIES_NOTE if on else ""), ""]
     else:
         lines += ["No submission was scored.", ""]
     refused = [s for rd in d["rounds"] for s in rd["submissions"] if s["status"] != "scored"]
@@ -168,8 +200,18 @@ def write(path: Path) -> dict:
     if lock and lock.get("locked"):
         lines += ["## The locked estimator", "",
                   f"`{lock['carried_as']}` ({lock['name']}), sha256 {lock['entry_sha256'][:16]}, {lock['size']['nodes']} nodes.", ""]
-        lines += _table([_row("as submitted", lock), _row("scored again, fresh seed", lock.get("measured_again") or {})])
+        rows = [_row("as submitted", lock, on), _row("scored again, fresh seed" + (" and fresh copies" if on else ""),
+                                                      lock.get("measured_again") or {}, on)]
+        if lock.get("on_the_network"):
+            rows.append(_row("on the network itself", lock["on_the_network"], on))
+        lines += _table(rows, on)
         lines.append("")
+        bench = (lock.get("measured_again") or {}).get("benchmark") or {}
+        if on and bench.get("constant_best") is not None:
+            lines += ["What a number written into an estimator would score on the copies of the second scoring: "
+                      f"{_e(bench['constant_unchanged'])} for the network's own accuracy, and at best {_e(bench['constant_best'])} "
+                      f"(the copies' mean accuracy, which nobody is told). The best plain sampling there: {_e(bench.get('best_reward'))} "
+                      f"with {round(bench['best_samples']):,} inputs." if bench.get("best_samples") else "", ""]
         check = d["check"]
         if check:
             lines += ["### On the held-out networks", ""]
@@ -202,9 +244,11 @@ def write(path: Path) -> dict:
         rows = []
         for n in _in_order(rs["networks"], [net] + d["nets"]):
             for r in rs["networks"][n]:
-                rows.append(_row(f"{r['name']} on {n}", r))
-        lines += _table(rows)
+                rows.append(_row(f"{r['name']} on {n}" + (" (copies)" if on and n == net else ""), r, on))
+        lines += _table(rows, on)
         lines.append("")
+        if on:
+            lines += [f"`{net}` is scored on copies, as in the rounds; the held-out networks are scored as they are.", ""]
 
     # what the agent ran
     ran = exploration(path, d["rounds"])

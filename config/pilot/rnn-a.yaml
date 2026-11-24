@@ -6,3 +6,5 @@ model: models/rnn-a
 network: rnn-a-s2
 heldout:
   networks: [rnn-a-s1, rnn-a-s3, rnn-a-s0, rnn-a-s4]
+verifier:
+  copies: {share: 0.4, size: 0.5}   # how this network's copies are made (python -m arcagent.calibrate)

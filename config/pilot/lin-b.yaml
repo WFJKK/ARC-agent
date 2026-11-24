@@ -6,3 +6,5 @@ model: models/lin-b
 network: lin-b-s0
 heldout:
   networks: [lin-b-s1]
+verifier:
+  copies: {share: 0.01, size: 0.316}   # how this network's copies are made (python -m arcagent.calibrate)

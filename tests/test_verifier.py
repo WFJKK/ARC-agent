@@ -102,3 +102,81 @@ def test_refusals_say_why(model, ver):
     r = slow.score(model.monte_carlo(ver.weights, 4))
     assert r["status"] == "refused" and "ran out of time" in r["reason"]
     assert describe(r).startswith("refused:")
+
+
+# scoring on copies of the network ----------------------------------------------------------------
+COPIES = {"count": 8, "runs": 16, "reference_inputs": 4096, "share": 0.125, "size": 0.04}
+CFG_COPIES = {**CFG, "verifier": {**CFG["verifier"], "copies": COPIES}}
+
+
+@pytest.fixture(scope="module")
+def cver(model, ver):
+    return Verifier(model, "rnn-b-s0", CFG_COPIES, reference=ver.reference())
+
+
+def test_a_scoring_on_copies_is_what_the_measuring_module_measures(model, ver, cver):
+    import json
+
+    from arcagent import measure
+
+    e = model.monte_carlo(cver.weights, 64)
+    r = cver.score(e, seed=3, keep_runs=True)
+    assert r["status"] == "scored" and r["scored_on"] == "copies" and r["runs"] == 128 and r["seed"] == 3
+    raw = measure.on_copies(e, cver.weights, model.module().forward, model.task_module().answer, model.data_set,
+                            model.input_space, cver.copies, 3, chunk=cver.chunk())
+    p = r["parts"]
+    assert p == measure.copies_parts(raw, cver.F) and math.isclose(r["reward"], -p["mse"] - 1e-6 * p["cost"])
+    A, b = raw["accuracy"], r["benchmark"]
+    assert r["copies"]["accuracy"] == A.tolist() and r["copies"]["seeds"] == raw["seeds"] and r["copies"]["count"] == 8
+    assert (r["copies"]["share"], r["copies"]["size"], r["copies"]["runs"]) == (0.125, 0.04, 16)
+    assert r["reference"] == {"method": "sample", "inputs": 4096, "chunk": 4096, "copies": 8,
+                              "standard_error": raw["reference"]["standard_error"]}
+    # the benchmark: plain sampling on these copies, and what a number written in could score on them
+    s, v = cver.sample_ops / cver.F, float(np.mean(A * (1 - A)))
+    assert math.isclose(b["variance"], v) and math.isclose(b["samples_at_cost"], 64)
+    assert math.isclose(b["mse_at_cost"], v / 64) and math.isclose(b["best_reward"], -2 * math.sqrt(1e-6 * s * v))
+    assert math.isclose(b["constant_best"], -A.var())
+    assert math.isclose(b["constant_unchanged"], -float(np.mean((ver.reference()["accuracy"] - A) ** 2)))
+    kept = r["runs_data"]
+    assert np.array(kept["estimates"]).shape == (8, 16) and kept["accuracy"] == A.tolist()
+    assert np.array_equal(np.array(kept["estimates"]), raw["estimates"])
+    # what the agent is told: nothing of the copies' accuracies
+    seen = agent_view(r)
+    assert set(seen) == {"status", "reason", "reward", "size", "runs", "mean_squared_error", "rms_error", "cost", "cost_min",
+                         "cost_max", "estimate_mean", "estimate_std", "random_draws_per_run", "uses_random_draws", "copies",
+                         "runs_per_copy", "estimate_std_between_copies"}
+    assert "accuracy" not in json.dumps(seen) and seen["copies"] == 8 and seen["runs_per_copy"] == 16
+    assert "over 128 runs on 8 copies" in describe(r)
+    assert cver.score(e, seed=3)["parts"] == p  # the seed decides the copies and the runs
+
+
+def test_scoring_on_the_network_itself_stays_what_it_was(model, ver, cver):
+    e = model.monte_carlo(cver.weights, 64)
+    alone = cver.score(e, seed=3, copies=False)
+    assert alone["scored_on"] == "network" and alone["runs"] == 512 and "copies" not in alone and "copies" not in alone["parts"]
+    plain = ver.score(e, seed=3)
+    assert plain["parts"] == alone["parts"] and plain["reward"] == alone["reward"] and plain["scored_on"] == "network"
+    assert "constant_best" not in plain["benchmark"]
+    with pytest.raises(ValueError, match="no copies block"):
+        ver.score(e, copies=True)
+    with pytest.raises(ValueError, match="needs share, size"):
+        Verifier(model, "rnn-b-s0", {**CFG, "verifier": {"copies": {"count": 4, "runs": 2, "reference_inputs": 64}}})
+
+
+def test_on_copies_an_estimator_that_draws_nothing_gives_one_number_for_each_copy(model, cver):
+    g = model.graph(cver.weights)
+    e = g.entry(g.weight("readout").sum() + g.weight("recurrent").sum() + g.weight("input").sum())  # follows the copy, draws nothing
+    r = cver.score(e, seed=5, keep_runs=True)
+    est = np.array(r["runs_data"]["estimates"])
+    assert not r["parts"]["random"] and (est == est[:, :1]).all() and r["parts"]["estimate_std"] == 0
+    assert len(set(est[:, 0].tolist())) > 4 and r["parts"]["estimate_between"] > 0  # the copies' weights differ
+
+
+def test_on_copies_a_refusal_names_the_copy(model, cver):
+    g = model.graph(cver.weights)
+    e = g.entry(lang.sqrt(g.const(float(cver.weights["input"][0, 0])) - g.weight("input")[0, 0]))
+    assert cver.score(e, copies=False)["status"] == "scored"  # on the network itself it is fine
+    r = Verifier(model, "rnn-b-s0", {**CFG, "verifier": {**CFG["verifier"], "copies": {**COPIES, "share": 1.0, "count": 12}}},
+                 reference=cver.reference()).score(e, seed=2)
+    assert r["status"] == "refused" and r["reason"].startswith("on a copy of the network (copy(") and r["parts"] is None
+    assert "the estimate is" in r["reason"]

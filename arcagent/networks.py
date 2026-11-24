@@ -18,12 +18,11 @@ looks for; references.py: reference estimators for the report), which only the v
 from __future__ import annotations
 
 import importlib.util
-import math
 from pathlib import Path
 
 import numpy as np
 
-from . import lang
+from . import lang, measure
 from .util import REPO_ROOT, read_yaml, sha256_file
 
 
@@ -163,12 +162,9 @@ class Model:
 
     def monte_carlo(self, weights: dict, n: int) -> dict:
         """Plain sampling as an estimator: n inputs drawn afresh in every run, the share on which the network gives
-        the task's answer. It costs n times (the draws, a forward pass, the answer and one comparison) plus the
-        sum and the division."""
-        g = self.graph(weights)
-        x = g.inputs(int(n))
-        right = self.module().forward(g, lang, x) == self.task_module().answer(g, lang, x)
-        return g.entry(right.sum() / float(n))
+        the task's answer (measure.monte_carlo)."""
+        return measure.monte_carlo(self.module().forward, self.task_module().answer, weights, self.data_set,
+                                   self.input_space, n)
 
     def sample_ops(self, weights: dict) -> int:
         """What one more input costs plain sampling: the operations of monte_carlo(n + 1) less those of monte_carlo(n)."""
@@ -179,48 +175,19 @@ class Model:
     def outputs(self, weights: dict, x, chunk: int | None = None) -> tuple:
         """The network's outputs and the task's answers on the inputs x (a numpy array, one row each), computed with
         model.forward and task.answer through the interpreter, chunk inputs at a time."""
-        x = np.asarray(x)
-        chunk = int(chunk or self.max_batch)
-        got, want = [], []
-        for i in range(0, len(x), chunk):
-            g = self.graph(weights)
-            xs = g.const(x[i:i + chunk])
-            both = lang.stack([self.module().forward(g, lang, xs), self.task_module().answer(g, lang, xs)], axis=0)
-            v = lang.Evaluator(g.entry(both), weights).run([0])["estimate"]
-            got.append(v[0])
-            want.append(v[1])
-        return np.concatenate(got), np.concatenate(want)
+        return measure.outputs(self.module().forward, self.task_module().answer, weights, self.data_set,
+                               self.input_space, x, int(chunk or self.max_batch))
 
     def effective_chunk(self, chunk: int) -> int:
         """The chunk of a measurement, no larger than the network can be run on at once."""
         return min(int(chunk), self.max_batch)
 
     def accuracy(self, weights: dict, n: int, seed: int, chunk: int = 32768) -> dict:
-        """How often the network gives the task's answer, through the interpreter, as an estimator would run them.
-
-        A data set that can be listed and has at most n inputs is measured exactly, on every input, each weighted
-        by how likely it is (method exact). Otherwise the network is run on n inputs drawn from the data set with
-        the seed, chunk inputs at a time: chunk k is monte_carlo(chunk) run with the seed [seed, k] (method
-        sample)."""
-        n, chunk = int(n), self.effective_chunk(chunk)
-        if self.n_total is not None and self.n_total <= n:
-            total, correct, groups = 0.0, 0, []
-            for x, p in lang.enumerate_inputs(self.data_set, self.input_space):
-                out, ans = self.outputs(weights, x, chunk)
-                k = int((out == ans).sum())
-                total += k * p
-                correct += k
-                groups.append({"inputs": int(len(x)), "correct": k, "probability_each": p})
-            return {"accuracy": float(total), "correct": correct, "n": n, "seed": int(seed), "chunk": chunk,
-                    "method": "exact", "inputs": int(self.n_total), "groups": groups, "standard_error": 0.0}
-        if n < 1 or chunk < 1 or n % chunk:
-            raise ValueError("the inputs must be a positive multiple of the chunk")
-        runs = n // chunk
-        r = lang.run_estimator(self.monte_carlo(weights, chunk), weights, runs, int(seed))
-        correct = int(sum(int(round(e * chunk)) for e in r["estimates"]))
-        a = correct / n
-        return {"accuracy": a, "correct": correct, "n": n, "seed": int(seed), "chunk": chunk, "method": "sample",
-                "inputs": n, "standard_error": math.sqrt(a * (1 - a) / n)}
+        """How often the network gives the task's answer, through the interpreter, as an estimator would run them
+        (measure.accuracy): exactly, on every input, where the data set can be listed and has at most n inputs;
+        otherwise on n inputs drawn from the data set with the seed, chunk inputs at a time."""
+        return measure.accuracy(self.module().forward, self.task_module().answer, weights, self.data_set,
+                                self.input_space, n, seed, self.effective_chunk(chunk))
 
     # what the agent is given about the network besides its weights, model.py and task.py
     def info(self) -> dict:

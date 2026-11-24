@@ -6,3 +6,5 @@ model: models/att-d
 network: att-d-s0
 heldout:
   networks: [att-d-s1]
+verifier:
+  copies: {share: 0.01, size: 2.83}   # how this network's copies are made (python -m arcagent.calibrate)

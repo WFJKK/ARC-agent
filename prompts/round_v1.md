@@ -10,7 +10,7 @@ written in a small language of priced operations.
 The verifier measures two things about an estimator: how far its estimates are from the network's
 accuracy, and its **cost** (its operations, compared with one forward pass of the network). One
 formula, under "How an estimator is scored", combines them into the reward. Your aim is the highest
-reward.
+reward.{{SCORED_ON}}
 
 This is round {{ROUND}} of at most {{ROUNDS_MAX}}. Each round is a fresh session: you keep nothing
 from earlier rounds except what is written under "Earlier rounds" below and the saved estimators.
@@ -46,12 +46,7 @@ In your sandbox it is the module `task`:
 
 ## How an estimator is scored
 
-The verifier first measures the network's accuracy A itself: it runs the network on
-{{REFERENCE_INPUTS}} and counts how often the output is the task's answer. You are not told A.
-
-It then runs your estimator {{RUNS}} times, each run with fresh random draws from a seed it draws
-itself, and keeps each run's estimate and its cost in forward passes (its operations over
-{{MODEL_OPS}}). An estimator that draws nothing gives the same number at the same cost in every run.
+{{SCORING}}
 The reward is
 
     {{REWARD_FORMULA}}
@@ -70,7 +65,7 @@ stays what it was.
   costs nothing: only a submitted estimator is scored.
 - `submit_estimator(name)`: up to {{SUBMISSIONS}} submissions this round.
 - An estimator may have up to {{MAX_NODES}} nodes, and its constants up to {{MAX_CONST}} numbers in
-  all. The verifier gives its {{RUNS}} runs {{VERIFIER_SECONDS}} s together.
+  all. The verifier gives the estimator's {{RUNS}} runs {{VERIFIER_SECONDS}} s together.
 
 ## Earlier rounds
 

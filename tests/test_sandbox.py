@@ -46,7 +46,8 @@ def test_the_agents_code_cannot_read_what_is_withheld(model, tmp_path):
     session = Session.create(tmp_path / "run" / "round_001" / "session", cfg, "rnn-b-s0", tmp_path / "run")
     code = f"""
 import os
-for path in ({str(model.withheld() / "task.yaml")!r}, {str(model.weights_path("rnn-b-s1"))!r}, {str(model.path / "config.yaml")!r}):
+for path in ({str(model.withheld() / "task.yaml")!r}, {str(model.withheld() / "copies.yaml")!r}, {str(model.weights_path("rnn-b-s1"))!r},
+             {str(model.path / "config.yaml")!r}):
     try:
         open(path).read()
         print("READ", path)
@@ -57,8 +58,9 @@ g = graph()
 print(run(g.entry(g.const(0.5)))["estimates"].tolist())
 """
     out = session.run_python(code)
-    assert out["sandbox"] == "landlock" and "READ" not in out["output"] and out["output"].count("blocked PermissionError") == 3
-    assert "['harness.py', 'input.json', 'lang.py', 'model.py', 'out', 'recipe.py', 'rewards.py', 'task.py', 'tmp', 'weights.npz']" in out["output"]
+    assert out["sandbox"] == "landlock" and "READ" not in out["output"] and out["output"].count("blocked PermissionError") == 4
+    assert ("['harness.py', 'input.json', 'lang.py', 'measure.py', 'model.py', 'out', 'recipe.py', 'rewards.py', 'task.py', 'tmp', "
+            "'weights.npz']") in out["output"]
     assert out["output"].strip().endswith("[0.5]")
 
 

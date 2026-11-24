@@ -10,3 +10,5 @@ model: models/rnn-g
 network: rnn-g-s0
 heldout:
   networks: [rnn-g-z0, rnn-g-z1, rnn-g-z2, rnn-g-z3, rnn-g-z4, rnn-g-n1, rnn-g-n2, rnn-g-n3]
+verifier:
+  copies: {share: 0.01, size: 0.0398}   # how this network's copies are made (python -m arcagent.calibrate)

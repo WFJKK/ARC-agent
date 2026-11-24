@@ -22,7 +22,7 @@ print(r["estimates"].mean(), r["estimates"].std(), r["cost"].mean())
 
 For exploring in plain numpy, `weights` holds the weights as arrays, `sample(n, seed)` draws inputs
 from the data set and `outputs(x)` gives the network's outputs and the task's answers on them.
-
+{{COPIES_DOC}}
 Every expression is also computed in an example run while you build (seed 0, or `graph(seed=...)`),
 so `x.shape` and `x.value` exist and a wrong shape fails at the line that makes it.
 `lang.Graph.load(e, weights, info["data_set"], info["input_space"])` opens a saved estimator again and
@@ -42,8 +42,8 @@ What does not depend on a random draw is the same in every run, and every run is
 it that the run uses: precomputing from the weights is paid in every run, not once.
 
 `run(e, runs, seed)` runs the estimator exactly as the verifier does (run k with the seed `[seed, k]`)
-and `score_against(e, accuracy)` gives the reward it would get if the network's accuracy were the
-number you give.
+on the weights you hold, and `score_against(e, accuracy)` gives the reward that would get if the
+network's accuracy were the number you give.
 
 ### Operations and what they cost
 

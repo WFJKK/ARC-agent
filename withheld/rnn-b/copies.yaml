@@ -1,0 +1,67 @@
+# Withheld from the agent, like everything here: how the copies of each run network are made (the share and the size
+# are in its pilot config, and the agent is told them) and what python -m arcagent.calibrate measured on the way,
+# which says how often the copies give the task's answer. 24 November 2026.
+rnn-b-s0:
+  share: 0.125
+  size: 0.0398
+  weights: 32
+  rule: variance of the copies' accuracies at least 4 times the best plain sampling's loss, lambda 1e-06
+  inputs_per_copy: 32768
+  coarse:
+  - size: 0.02
+    copies: 32
+    mean: 0.9617
+    sd: 0.0156
+    q10: 0.9444
+    median: 0.9619
+    q90: 0.9815
+    variance_over_best_sampling_loss: 0.59
+  - size: 0.05
+    copies: 32
+    mean: 0.9022
+    sd: 0.0557
+    q10: 0.8264
+    median: 0.9198
+    q90: 0.9507
+    variance_over_best_sampling_loss: 4.97
+  fine:
+  - size: 0.0251
+    copies: 128
+    mean: 0.9473
+    sd: 0.028
+    q10: 0.9108
+    median: 0.9506
+    q90: 0.9789
+    variance_over_best_sampling_loss: 1.65
+  - size: 0.0316
+    copies: 128
+    mean: 0.9397
+    sd: 0.0385
+    q10: 0.8917
+    median: 0.9485
+    q90: 0.9754
+    variance_over_best_sampling_loss: 2.96
+  - size: 0.0398
+    copies: 128
+    mean: 0.9216
+    sd: 0.049
+    q10: 0.8491
+    median: 0.934
+    q90: 0.9756
+    variance_over_best_sampling_loss: 4.25
+  - size: 0.05
+    copies: 128
+    mean: 0.899
+    sd: 0.0697
+    q10: 0.8036
+    median: 0.9131
+    q90: 0.972
+    variance_over_best_sampling_loss: 7.77
+  - size: 0.0629
+    copies: 128
+    mean: 0.8813
+    sd: 0.0834
+    q10: 0.7697
+    median: 0.8996
+    q90: 0.9689
+    variance_over_best_sampling_loss: 10.42

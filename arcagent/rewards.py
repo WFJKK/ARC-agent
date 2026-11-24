@@ -40,9 +40,9 @@ FORMULAS = {
 }
 EXPLANATIONS = {
     "r_lambda": (
-        "A is how often the network gives the task's answer, as the verifier measures it itself, and cost is\n"
-        "a run's operations over the operations of one forward pass of the network. The\n"
-        "reward is the negative mean squared error of the estimates, less lambda times the mean cost. Higher is\n"
+        "A is the accuracy the verifier measured for the network a run was on, as said above, and cost is the\n"
+        "run's operations over the operations of one forward pass of the network. The reward is the negative\n"
+        "mean squared error of the estimates, less lambda times the mean cost. Higher is\n"
         "better, and 0 is the most: the exact accuracy at no cost. An error of one percentage point, 0.01,\n"
         "costs 0.0001 of reward, as much as {per_point:g} forward passes: so {per_point:g} more forward passes that\n"
         "remove one point of error break even."),

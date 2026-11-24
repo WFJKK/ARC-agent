@@ -18,6 +18,7 @@ MODEL = "claude-fable-5-1"
 @pytest.fixture()
 def setup(tmp_path):
     cfg = run_config.load("config/pilot/rnn-b-smoke.yaml", {"runs_dir": str(tmp_path), "sandbox": "process",
+                                                      "verifier": {"copies": {"count": 0}},  # the backend is what is tested
                                                       "api_retries": {"tries": 3, "first_wait_s": 1, "max_wait_s": 2}})
     session = Session.create(tmp_path / "run" / "round_001" / "session", cfg, "rnn-b-s0", tmp_path / "run")
     return cfg, session, tmp_path / "run" / "round_001"

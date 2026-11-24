@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import budget, rewards
+from . import budget, measure, rewards
 from .util import REPO_ROOT, read_yaml
 
 DEFAULTS = REPO_ROOT / "config" / "defaults.yaml"
@@ -59,6 +59,10 @@ def load(path, overrides: dict | None = None) -> dict:
         rewards.check(cfg["reward"])
     except ValueError as exc:
         raise ConfigError(str(exc)) from None
+    try:
+        measure.copies_spec((cfg.get("verifier") or {}).get("copies"))
+    except ValueError as exc:
+        raise ConfigError(f"{exc}; python -m arcagent.calibrate finds a network's share and size") from None
     if cfg.get("auth") not in ("login", "api_key"):
         raise ConfigError(f"auth must be login or api_key, not {cfg.get('auth')!r}")
     for key in ("api_key_env", "api_workspace_env"):

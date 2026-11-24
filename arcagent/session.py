@@ -58,6 +58,7 @@ warnings.filterwarnings("ignore", message=r"(divide by zero|overflow|invalid val
                         category=RuntimeWarning)
 
 import lang
+import measure
 import model
 import rewards
 import task
@@ -69,17 +70,52 @@ def make_result(weights, info, extra):
     estimators = dict(extra["estimators"])
     saved = {}
     F = info["forward_ops"]
+    own = weights
+    spec = info.get("copies")
+    world = (info["data_set"], info["input_space"])
 
-    def graph(seed=0):
-        """A new lang.Graph on these weights and the data set. Its example run uses the seed."""
-        return lang.Graph(weights, info["data_set"], info["input_space"], seed)
+    def graph(seed=0, weights=None):
+        """A new lang.Graph on the network's weights (or on `weights`, a copy's) and the data set. Its example run
+        uses the seed."""
+        return lang.Graph(own if weights is None else weights, *world, seed)
 
-    def run(estimator, runs=1, seed=0):
-        """The estimator run `runs` times as the verifier runs it, run k with the seed [seed, k]: the estimates,
-        the operations and the random numbers drawn in each run, and the cost of each in forward passes."""
+    def run(estimator, runs=1, seed=0, weights=None):
+        """The estimator run `runs` times as the verifier runs it, run k with the seed [seed, k], on the network's
+        weights (or on `weights`, a copy's): the estimates, the operations and the random numbers drawn in each run,
+        and the cost of each in forward passes."""
         lang.check_structure(estimator, extra["limits"]["max_nodes"], extra["limits"]["max_const_scalars"])
-        r = lang.run_estimator(estimator, weights, runs, seed)
+        r = lang.run_estimator(estimator, own if weights is None else weights, runs, seed)
         return {**r, "cost": r["ops"] / F}
+
+    def copy(seed=0):
+        """A copy of the network as the verifier makes its copies, from numpy.random.default_rng(seed): its weights,
+        a dict like `weights`."""
+        if not spec:
+            raise ValueError("this run scores an estimator on the network itself, not on copies of it")
+        return measure.copy_of(own, spec["share"], spec["size"], np.random.default_rng(seed))
+
+    def accuracy(weights=None, inputs=None, seed=0):
+        """How often a network (yours, or `weights`, a copy's) gives the task's answer, measured as the verifier
+        measures it: on every input of the data set if it has no more than `inputs`, else on `inputs` inputs drawn
+        with the seed. `inputs` is the verifier's own number if you give none."""
+        n = int(inputs or (spec or {}).get("reference_inputs") or info["reference_inputs"])
+        chunk = min(info["max_batch"], measure.CHUNK, n)
+        return measure.accuracy(model.forward, task.answer, own if weights is None else weights, *world,
+                                n - n % chunk, seed, chunk)["accuracy"]
+
+    def score_on_copies(estimator, copies=16, runs=None, seed=0):
+        """A scoring as the verifier makes it, on `copies` copies it draws from your seed (the verifier's own seed
+        is another one): the reward, the mean squared error and the cost, and for every copy its accuracy and the
+        mean of the estimates on it."""
+        if not spec:
+            raise ValueError("this run scores an estimator on the network itself, not on copies of it")
+        lang.check_structure(estimator, extra["limits"]["max_nodes"], extra["limits"]["max_const_scalars"])
+        raw = measure.on_copies(estimator, own, model.forward, task.answer, *world, spec, seed, copies, runs,
+                                min(info["max_batch"], measure.CHUNK))
+        parts = measure.copies_parts(raw, F)
+        return {"reward": rewards.compute(parts, extra["reward"])["reward"], "mean_squared_error": parts["mse"],
+                "cost": parts["cost"], "accuracy": raw["accuracy"], "estimate_mean": raw["estimates"].mean(axis=1),
+                "estimates": raw["estimates"], "seeds": raw["seeds"]}
 
     def score_against(estimator, accuracy, runs=256, seed=0):
         """The reward the verifier would give the estimator if the network's accuracy were `accuracy`, over `runs`
@@ -93,19 +129,10 @@ def make_result(weights, info, extra):
         """n inputs drawn from the data set with numpy.random.default_rng(seed), one row each."""
         return lang.draw_inputs(info["data_set"], info["input_space"], int(n), np.random.default_rng(seed))
 
-    def outputs(x, chunk=info["max_batch"]):
-        """The network's outputs and the task's answers on the inputs x (a numpy array, one row each), computed
-        with model.forward and task.answer through the interpreter."""
-        x = np.asarray(x)
-        got, want = [], []
-        for i in range(0, len(x), chunk):
-            g = graph()
-            xs = g.const(x[i:i + chunk])
-            both = lang.stack([model.forward(g, lang, xs), task.answer(g, lang, xs)], axis=0)
-            v = lang.Evaluator(g.entry(both), weights).run([0])["estimate"]
-            got.append(v[0])
-            want.append(v[1])
-        return np.concatenate(got), np.concatenate(want)
+    def outputs(x, chunk=info["max_batch"], weights=None):
+        """The network's outputs (or those of `weights`, a copy's) and the task's answers on the inputs x (a numpy
+        array, one row each), computed with model.forward and task.answer through the interpreter."""
+        return measure.outputs(model.forward, task.answer, own if weights is None else weights, *world, x, chunk)
 
     def save_estimator(name, estimator):
         """Keep an estimator in the session's workspace under a name, to submit it or to build on it later."""
@@ -115,7 +142,8 @@ def make_result(weights, info, extra):
         return size
 
     scope = {"weights": weights, "info": info, "np": np, "lang": lang, "model": model, "task": task, "graph": graph,
-             "run": run, "score_against": score_against, "sample": sample, "outputs": outputs,
+             "run": run, "score_against": score_against, "sample": sample, "outputs": outputs, "copy": copy,
+             "accuracy": accuracy, "score_on_copies": score_on_copies,
              "estimators": estimators, "save_estimator": save_estimator, "__name__": "__main__"}
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
@@ -136,8 +164,12 @@ TOOLS = {
             "weights), `run(estimator, runs=1, seed=0)` (its estimates and costs, as the verifier computes them), "
             "`score_against(estimator, accuracy, runs=256, seed=0)` (the reward if the network's accuracy were the "
             "number you give), `sample(n, seed=0)` (inputs drawn from the data set with numpy), `outputs(x)` (the "
-            "network's outputs and the task's answers on inputs x), `estimators` (the saved estimators by name) and "
-            "`save_estimator(name, estimator)`. The code may read its own folder and Python's libraries and write "
+            "network's outputs and the task's answers on inputs x), `accuracy()` (how often the network gives the "
+            "task's answer, measured as the verifier measures it), `estimators` (the saved estimators by name) and "
+            "`save_estimator(name, estimator)`. When the run scores an estimator on copies of the network: "
+            "`copy(seed=0)` (the weights of a copy, made as the verifier makes its own), `graph`, `run`, `outputs` and "
+            "`accuracy` with `weights=` a copy's, and `score_on_copies(estimator, copies=16, runs=None, seed=0)` (a "
+            "whole scoring on copies drawn from your seed). The code may read its own folder and Python's libraries and write "
             "only to tmp/ in its folder; other files, the network and other programs are closed to it "
             "(PermissionError). Nothing persists between calls except saved estimators. Each call counts against the "
             "python budget."),
@@ -145,10 +177,10 @@ TOOLS = {
     },
     "submit_estimator": {
         "description": (
-            "Hand a saved estimator to the verifier. It runs the estimator many times on seeds of its own and returns "
-            "the result: status scored or refused (with the reason), the reward, the mean squared error of the "
-            "estimates, their mean and spread, and the cost in forward passes (mean, least and most). Each call counts "
-            "against the submission budget."),
+            "Hand a saved estimator to the verifier. It runs the estimator many times on seeds of its own (and, when "
+            "the run scores on copies of the network, on copies of its own) and returns the result: status scored or "
+            "refused (with the reason), the reward, the mean squared error of the estimates, their mean and spread, "
+            "and the cost in forward passes (mean, least and most). Each call counts against the submission budget."),
         "schema": {"type": "object", "properties": {
             "name": {"type": "string", "description": "the name the estimator was saved under"}}, "required": ["name"]},
     },
@@ -164,17 +196,23 @@ def verifier_settings(cfg: dict) -> dict:
 def agent_info(model, forward_ops: int, cfg: dict) -> dict:
     """What the agent's code is handed about the network, its data set and the verifier. No name in it says more
     than the model folder's own agent-facing files."""
+    from . import measure
+
     ver, limits = verifier_settings(cfg)
-    return {**model.info(), "forward_ops": int(forward_ops), "runs": int(ver["runs"]),
-            "reference_inputs": int(ver["reference_inputs"]),
-            "limits": {"max_nodes": int(limits["max_nodes"]), "max_const_scalars": int(limits["max_const_scalars"])}}
+    out = {**model.info(), "forward_ops": int(forward_ops), "runs": int(ver["runs"]),
+           "reference_inputs": int(ver["reference_inputs"]),
+           "limits": {"max_nodes": int(limits["max_nodes"]), "max_const_scalars": int(limits["max_const_scalars"])}}
+    spec = measure.copies_spec(ver.get("copies"))
+    if spec:
+        out["copies"] = spec  # how the verifier's copies are made and scored; the agent is told all of it
+    return out
 
 
 def box_files(model) -> dict:
     """The modules the agent's code may import, as they are placed in the sandbox folder."""
     here = Path(__file__).parent
-    return {"lang.py": (here / "lang.py").read_text(), "rewards.py": (here / "rewards.py").read_text(),
-            "model.py": model.source(), "task.py": model.task_source()}
+    return {"lang.py": (here / "lang.py").read_text(), "measure.py": (here / "measure.py").read_text(),
+            "rewards.py": (here / "rewards.py").read_text(), "model.py": model.source(), "task.py": model.task_source()}
 
 
 def surface(model, forward_ops: int, cfg: dict) -> dict:

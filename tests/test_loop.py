@@ -14,9 +14,11 @@ FAKE = HERE / "fake_run"
 
 
 def config(tmp_path, **over):
+    """A run scored on the network itself (copies: count 0), as these scripted rounds were written for: there the
+    number read off the network wins, and the held-out networks show it. The runs on copies are further down."""
     base = {"runs_dir": str(tmp_path), "backend": "fake", "sandbox": "process", "rounds_max": 6,
             "session": {"python_calls": 3, "submissions": 2},
-            "verifier": {"runs": 256, "reference_inputs": 2**16},
+            "verifier": {"runs": 256, "reference_inputs": 2**16, "copies": {"count": 0}},
             "heldout": {"runs": 64, "check_runs": 256}}
     return run_config.load("config/pilot/rnn-b-smoke.yaml", run_config.merge(base, over))
 
@@ -188,32 +190,140 @@ def test_a_changed_tree_is_refused_on_resume(tmp_path, monkeypatch):
 def test_a_whole_run_on_networks_of_tokens(pilot, exact, tmp_path):
     """One scripted round on a linear network whose data set is listed in full, on an attention network whose data
     set is listed too though its inputs vary in length (one slot may be empty), and on one whose data set is too
-    large to list: the reference, the scoring, the held-out check and the report."""
+    large to list: the reference, the scoring on copies, the held-out check and the report."""
     base = {"runs_dir": str(tmp_path), "backend": "fake", "sandbox": "process", "rounds_max": 1,
             "session": {"python_calls": 3, "submissions": 2},
-            "verifier": {"runs": 64, "reference_inputs": 2**16}, "heldout": {"runs": 16, "check_runs": 64}}
+            "verifier": {"runs": 64, "reference_inputs": 2**16, "copies": {"count": 6, "runs": 8, "reference_inputs": 8192}},
+            "heldout": {"runs": 16, "check_runs": 64}}
     cfg = run_config.load(pilot, base)
     lines = []
     path = loop.start(cfg, fake_scripts=FAKE, out=lines.append)
     refs = loop.cached_references(path)
     net, held = cfg["network"], cfg["heldout"]["networks"]
     assert set(refs) == {net, *held}
-    A = refs[net]["accuracy"]
     if exact:
         assert all(r["method"] == "exact" and r["inputs"] == exact for r in refs.values())
         assert any(f"measured exactly, on all {exact:,} of its inputs" in line for line in lines)
         assert f"exactly, on all {exact:,} inputs of the data set" in (path / "report.md").read_text()
-        told = f"runs the network on\nevery one of the data set's {exact:,} inputs, each weighted by how often it is drawn,"
+        told = f"runs the copy on\nevery one of the data set's {exact:,} inputs, each weighted by how often it is drawn,"
     else:
         assert all(r["method"] == "sample" and r["n"] == 2**16 for r in refs.values())
-        told = "runs the network on\n65,536 inputs it draws from the data set and counts"
-    assert told in (path / "round_001" / "prompt.md").read_text()  # the agent is told how A is measured
+        told = "runs the copy on\n8,192 inputs it draws from the data set and counts"
+    assert told in (path / "round_001" / "prompt.md").read_text()  # the agent is told how a copy's accuracy is measured
     (rd,) = loop.completed(path)
     s32, c09 = rd["submissions"]
     from arcagent.networks import load_model
     m = load_model(cfg["model"])
     W = m.load_weights(net)
-    assert s32["parts"]["cost"] == pytest.approx(32 * m.sample_ops(W) / m.forward_ops(W))
-    assert c09["reward"] == pytest.approx(-((0.9 - A) ** 2))
+    assert s32["parts"]["cost"] == pytest.approx(32 * m.sample_ops(W) / m.forward_ops(W)) and s32["parts"]["copies"] == 6
+    receipt = read_json(path / "round_001" / "session" / "submissions" / "002" / "receipt.json")
+    A = np.array(receipt["copies"]["accuracy"])
+    assert receipt["reference"]["method"] == ("exact" if exact else "sample") and len(set(A.tolist())) > 1
+    assert c09["reward"] == pytest.approx(-float(np.mean((0.9 - A) ** 2)))  # a number, against every copy's accuracy
     check = read_json(path / "heldout_check.json")
     assert set(check["networks"]) == set(held) and all(r["runs"] == 64 for r in check["networks"].values())
+    assert all(r["scored_on"] == "network" for r in check["networks"].values())  # a held-out network, as it is
+
+
+# a run scored on copies of the network ---------------------------------------------------------------
+COPIES = HERE / "fake_copies"
+
+
+def copies_config(tmp_path, **over):
+    base = {"runs_dir": str(tmp_path), "backend": "fake", "sandbox": "process", "rounds_max": 6,
+            "session": {"python_calls": 3, "submissions": 2},
+            "verifier": {"runs": 256, "reference_inputs": 2**16, "copies": {"count": 32, "runs": 8, "reference_inputs": 8192}},
+            "heldout": {"runs": 64, "check_runs": 256}}
+    return run_config.load("config/pilot/rnn-b-smoke.yaml", run_config.merge(base, over))
+
+
+@pytest.fixture(scope="module")
+def on_copies(tmp_path_factory):
+    lines = []
+    path = loop.start(copies_config(tmp_path_factory.mktemp("copies")), fake_scripts=COPIES, out=lines.append)
+    return path, lines
+
+
+def test_on_copies_the_number_read_off_the_network_loses_and_a_sampler_is_locked(on_copies):
+    path, lines = on_copies
+    r1, r2 = loop.completed(path)
+    pasted, s64 = r1["submissions"]
+    (s256,) = r2["submissions"]
+    A = loop.cached_references(path)["rnn-b-s0"]["accuracy"]
+    assert [s["name"] for s in (pasted, s64, s256)] == ["pasted", "sampling_64", "sampling_256"]
+    assert pasted["parts"]["estimate_mean"] == pytest.approx(A, abs=0.01) and pasted["parts"]["cost"] == 0  # its own 8,192 inputs
+    # the number is far behind: behind the small sampler, and at more than four times the loss of the larger one
+    assert pasted["reward"] < s64["reward"] < s256["reward"] < 0 and pasted["reward"] < 4 * s256["reward"]
+    assert pasted["parts"]["tracking"] is None and s64["parts"]["tracking"] > 0.8
+    assert pasted["benchmark"]["constant_unchanged"] == pytest.approx(pasted["reward"], rel=0.25)
+    assert [rd["improved"] for rd in (r1, r2)] == [True, True]
+    lock = read_json(path / "lock.json")
+    assert lock["name"] == "sampling_256" and lock["parts"]["copies"] == 32 and lock["runs"] == 256
+    assert lock["measured_again"]["parts"]["copies"] == 32 and lock["measured_again"]["seed"] != lock["seed"]
+    alone = lock["on_the_network"]
+    assert alone["status"] == "scored" and "copies" not in alone["parts"] and alone["runs"] == 256
+    assert any("every scoring on 32 copies of the network drawn afresh" in line for line in lines)
+    assert any("the locked estimator on the network itself: reward" in line for line in lines)
+    assert loop.finish(path, out=lambda *_: None) == lock  # from the records alone: nothing is measured again
+
+
+def test_on_copies_the_agent_is_told_how_copies_are_made_and_nothing_of_their_accuracies(on_copies):
+    path, _ = on_copies
+    first = (path / "round_001" / "prompt.md").read_text()
+    for said in ("The estimator is not scored on the network as you hold it but on copies of it",
+                 "it makes\n32 copies of the network, each with a few of its weights changed at random",
+                 "Every weight is changed with probability 0.125, each on its own",
+                 "standard deviation is 0.0398\ntimes the root mean square of the entries of its weight matrix",
+                 "8,192 inputs it draws from the data set", "estimator 8 times on the copy", "That is 256 runs in all.",
+                 "s = score_on_copies(e, copies=16)", "`copy(seed)` in your sandbox makes a\ncopy this way"):
+        assert said in first, said
+    second = (path / "round_002" / "prompt.md").read_text()
+    assert "| estimate: spread on a copy | estimate: spread between copies | draws |" in second
+    assert "| r1s1 | scored | " in second and " | 0.00e+00 | 0.00e+00 | no |" in second  # the number: no spread at all
+    A = loop.cached_references(path)["rnn-b-s0"]["accuracy"]
+    forbidden = loop.forbidden_strings(read_json(path / "run.json")["config"], __import__("arcagent.networks", fromlist=["x"]).load_model("models/rnn-b"))
+    for k in (1, 2):
+        rdir = path / f"round_{k:03d}"
+        seen = [s["seen"] for s in read_json(rdir / "round.json")["submissions"]]
+        assert all("accuracy" not in s and "tracking" not in s and "estimate_std_between_copies" in s for s in seen)
+        assert "benchmark" not in (rdir / "prompt.md").read_text()
+    assert not hygiene.hits({"prompt": first.split("## Earlier rounds")[0]}, forbidden)
+    assert f"{A:.3f}" not in first and "rnn-b" not in first
+
+
+def test_on_copies_the_heldout_networks_are_scored_as_they_are(on_copies):
+    path, _ = on_copies
+    held = read_jsonl(path / loop.HELDOUT_SCORES)
+    assert len(held) == 6 and all(e["status"] == "scored" and "copies" not in e["parts"] and e["runs"] == 64 for e in held)
+    refs = loop.cached_references(path)
+    by = {(e["name"], e["network"]): e for e in held}
+    for net in ("rnn-b-s1", "rnn-b-s4"):
+        # the number read off the run's network, on another network: its error is the distance of the two accuracies
+        assert by[("pasted", net)]["parts"]["bias"] == pytest.approx(refs["rnn-b-s0"]["accuracy"] - refs[net]["accuracy"], abs=0.01)
+    check = read_json(path / "heldout_check.json")
+    assert all(r["scored_on"] == "network" and r["runs"] == 256 for r in check["networks"].values())
+
+
+def test_on_copies_the_report(on_copies):
+    path, _ = on_copies
+    text = (path / "report.md").read_text()
+    for said in ("- Scored on copies: for every scoring the verifier makes 32 copies of the network afresh, each weight changed "
+                 "with probability 0.125 by a normal draw of 0.0398 times the root mean square of its matrix",
+                 "| follows the copies |", "| scored again, fresh seed and fresh copies |", "| on the network itself |",
+                 "What a number written into an estimator would score on the copies of the second scoring:",
+                 "| the network's own accuracy, written in as a constant on rnn-b-s0 (copies) |",
+                 "`rnn-b-s0` is scored on copies, as in the rounds; the held-out networks are scored as they are."):
+        assert said in text, said
+    assert "\u2014" not in text
+    refs = read_json(path / "reference_scores.json")["networks"]
+    own = {r["name"]: r for r in refs["rnn-b-s0"]}
+    pasted = own["the network's own accuracy, written in as a constant"]
+    best = [n for n in own if n.startswith("plain sampling")]
+    n_star = round(pasted["benchmark"]["best_samples"])
+    assert f"plain sampling, {n_star} inputs" in best and all(own[n]["scored_on"] == "copies" for n in best)
+    assert pasted["reward"] < 4 * own[f"plain sampling, {n_star} inputs"]["reward"]
+    assert all(r["scored_on"] == "network" for r in refs["rnn-b-s1"])
+    report.write(path)  # again, from the records
+    assert (path / "report.md").read_text() == text
+    rows = loop.rescore(path, {"name": "r_lambda", "lam": 0.0}, out=lambda *_: None)
+    assert {"locked, fresh seed", "locked, on the network itself"} <= {r["what"] for r in rows}

@@ -191,7 +191,8 @@ def heldout_scores(path: Path, cfg: dict, model, rounds: list, log=None) -> list
             est = estimator_of(path, s)
             if lang.entry_hash(est) != s["entry_sha256"]:
                 raise RuntimeError(f"{s['carried_as']}'s estimator on disk is not the one the verifier scored")
-            r = v.score(est, seed=heldout_seed(cfg["run_id"], net), runs=runs)
+            # a held-out network is another network: the estimator is scored on it as it is, not on copies of it
+            r = v.score(est, seed=heldout_seed(cfg["run_id"], net), runs=runs, copies=False)
             line = {"round": s["round"], "submission": s["submission"], "carried_as": s["carried_as"], "name": s["name"],
                     "entry_sha256": s["entry_sha256"], "network": net, "status": r["status"], "reason": r["reason"],
                     "reward": r["reward"], "parts": r["parts"], "seed": r["seed"], "runs": r["runs"], "at": now()}
@@ -247,7 +248,7 @@ def start(cfg: dict, fake_scripts=None, out=print) -> Path:
     log = Log(path, out)
     verifier = verifier_for(path, cfg, model, cfg["network"], log)
     # Plain sampling must come out at what it draws: n inputs at one sampled input's price each.
-    probe_runs = verifier.score(model.monte_carlo(verifier.weights, 4), runs=8)
+    probe_runs = verifier.score(model.monte_carlo(verifier.weights, 4), runs=8, copies=False)
     if probe_runs["status"] != "scored" or abs(probe_runs["parts"]["cost"] * verifier.F - 4 * verifier.sample_ops) > 1e-6:
         raise RuntimeError(f"plain sampling written as an estimator does not cost what it draws: {describe(probe_runs)}")
     sb = choose(cfg, protected_paths(cfg, model, path))
@@ -275,9 +276,12 @@ def start(cfg: dict, fake_scripts=None, out=print) -> Path:
         "forward_ops": verifier.F, "sample_ops": verifier.sample_ops,
         "reference": {k: ref[k] for k in ("n", "seed", "chunk", "standard_error")},
     })
+    c = verifier.copies
+    how = (f"every scoring on {c['count']:,} copies of the network drawn afresh (each weight changed with probability "
+           f"{c['share']:g}, by {c['size']:g} times its matrix's RMS), {c['runs']:,} runs on each" if c
+           else f"{int(cfg['verifier']['runs']):,} runs per scoring")
     log(f"run {cfg['run_id']} at {path}: {cfg['model']} / {cfg['network']}, sandbox {sb.mode}, backend {cfg['backend']}; "
-        f"a forward pass is {verifier.F:,} operations; {int(cfg['verifier']['runs']):,} runs per scoring; "
-        f"{len(heldout_networks(cfg))} held-out networks")
+        f"a forward pass is {verifier.F:,} operations; {how}; {len(heldout_networks(cfg))} held-out networks")
     if cfg["backend"] == "claude_code" and cfg["auth"] == "api_key":
         b = cfg["budget"]
         log(f"billed to the API key in {cfg['api_key_env']}: at most ${float(b['run_usd']):.2f} for the run and "
@@ -383,15 +387,25 @@ def reference_scores(path: Path, cfg: dict, model, log=None) -> dict:
     out = {"seed": seed, "networks": {}}
     for net in [cfg["network"]] + heldout_networks(cfg):
         v = verifier_for(path, cfg, model, net, log)
+        own = net == cfg["network"]
+        on_copies = None if own else False  # the run's network as the rounds scored it; a held-out network as it is
         rows = []
         for name, est in model.reference_entries(v.weights).items():
-            rows.append({"name": name, **v.score(est, seed=seed)})
-        if net == cfg["network"]:
+            rows.append({"name": name, **v.score(est, seed=seed, copies=on_copies)})
+        if own:
             lam = rewards.lam_of(cfg["reward"])
             sizes = [int(n) for n in (cfg.get("report") or {}).get("sampling_sizes", [16, 64, 256])]
             A = v.reference()["accuracy"]
+            if v.copies is not None:
+                # what the rounds are for: the network's own accuracy, written in as a constant, on the copies
+                g = model.graph(v.weights)
+                pasted = v.score(g.entry(g.const(float(A))), seed=seed)
+                rows.append({"name": "the network's own accuracy, written in as a constant", **pasted})
+                var = (pasted.get("benchmark") or {}).get("variance") or A * (1 - A)
+            else:
+                var = A * (1 - A)
             if lam:
-                best = max(1, round((A * (1 - A) / (lam * v.sample_ops / v.F)) ** 0.5))
+                best = max(1, round((var / (lam * v.sample_ops / v.F)) ** 0.5))
                 sizes = sorted(set(sizes + [best]))
             for n in sizes:
                 rows.append({"name": f"plain sampling, {n} inputs", **v.score(model.monte_carlo(v.weights, n), seed=seed)})
@@ -436,9 +450,20 @@ def finish(path: Path, out=print) -> dict:
             if again["entry_sha256"] != lock["entry_sha256"]:
                 raise RuntimeError("the second scoring did not score the locked estimator")
             lock["measured_again"] = {k: again.get(k) for k in ("status", "reason", "reward", "parts", "seed", "runs", "benchmark")}
+        v = verifier_for(path, cfg, model, cfg["network"], log)
+        if v.copies is not None:
+            # The rounds scored it on copies. Once, for the report, on the network itself: where a number written
+            # into an estimator would have won.
+            if old_lock.get("entry_sha256") == lock["entry_sha256"] and old_lock.get("on_the_network"):
+                lock["on_the_network"] = old_lock["on_the_network"]
+            else:
+                alone = v.score(est, copies=False)
+                lock["on_the_network"] = {k: alone.get(k) for k in ("status", "reason", "reward", "parts", "seed", "runs", "benchmark")}
         write_json(path / "lock.json", lock)
         log(f"locked {best['carried_as']} ({best['entry_sha256'][:12]}): " + describe(best))
         log(f"the locked estimator with a fresh seed: {describe(lock['measured_again'])}")
+        if lock.get("on_the_network"):
+            log(f"the locked estimator on the network itself: {describe(lock['on_the_network'])}")
         nets = heldout_networks(cfg)
         if nets:
             if old_check.get("entry_sha256") == lock["entry_sha256"] and set(old_check.get("networks") or {}) == set(nets):
@@ -446,7 +471,7 @@ def finish(path: Path, out=print) -> dict:
             else:
                 check = {"entry_sha256": lock["entry_sha256"], "at": now(), "networks": {}}
                 for net in nets:
-                    r = verifier_for(path, cfg, model, net, log).score(est, runs=int(cfg["heldout"]["check_runs"]))
+                    r = verifier_for(path, cfg, model, net, log).score(est, runs=int(cfg["heldout"]["check_runs"]), copies=False)
                     if r["entry_sha256"] != lock["entry_sha256"]:
                         raise RuntimeError("the held-out check did not score the locked estimator")
                     check["networks"][net] = r
@@ -471,10 +496,11 @@ def rescore(path: Path, reward_cfg: dict, out=print) -> list:
         r = rewards.compute(s["parts"], reward_cfg)
         rows.append({"what": s["carried_as"], "name": s["name"], "recorded": s["reward"], "rescored": r["reward"]})
     lock = read_json(path / "lock.json") if (path / "lock.json").is_file() else {}
-    again = lock.get("measured_again") or {}
-    if again.get("status") == "scored":
-        rows.append({"what": "locked, fresh seed", "name": "", "recorded": again["reward"],
-                     "rescored": rewards.compute(again["parts"], reward_cfg)["reward"]})
+    for key, what in (("measured_again", "locked, fresh seed"), ("on_the_network", "locked, on the network itself")):
+        again = lock.get(key) or {}
+        if again.get("status") == "scored":
+            rows.append({"what": what, "name": "", "recorded": again["reward"],
+                         "rescored": rewards.compute(again["parts"], reward_cfg)["reward"]})
     check = read_json(path / "heldout_check.json") if (path / "heldout_check.json").is_file() else {}
     for net, r in (check.get("networks") or {}).items():
         if r["status"] == "scored":

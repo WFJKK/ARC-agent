@@ -6,3 +6,5 @@ model: models/lin-f-4
 network: lin-f-4-s0
 heldout:
   networks: [lin-f-4-s1, lin-f-4-s2, lin-f-4-s3, lin-f-4-s4, lin-f-4-s5]
+verifier:
+  copies: {share: 0.01, size: 0.251}   # how this network's copies are made (python -m arcagent.calibrate)

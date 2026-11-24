@@ -1,0 +1,85 @@
+# Withheld from the agent, like everything here: how the copies of each run network are made (the share and the size
+# are in its pilot config, and the agent is told them) and what python -m arcagent.calibrate measured on the way,
+# which says how often the copies give the task's answer. 24 November 2026.
+att-e-s0:
+  share: 0.01
+  size: 3.36
+  weights: 8320
+  rule: variance of the copies' accuracies at least 4 times the best plain sampling's loss, lambda 1e-06
+  inputs_per_copy: 32768
+  coarse:
+  - size: 0.02
+    copies: 32
+    mean: 0.013
+    sd: 0.0001
+    q10: 0.0129
+    median: 0.013
+    q90: 0.013
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.05
+    copies: 32
+    mean: 0.0129
+    sd: 0.0001
+    q10: 0.0128
+    median: 0.0129
+    q90: 0.0131
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.1
+    copies: 32
+    mean: 0.0129
+    sd: 0.0001
+    q10: 0.0128
+    median: 0.0129
+    q90: 0.0131
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.2
+    copies: 32
+    mean: 0.0128
+    sd: 0.0003
+    q10: 0.0123
+    median: 0.0129
+    q90: 0.013
+    variance_over_best_sampling_loss: 0.0
+  - size: 0.5
+    copies: 32
+    mean: 0.0138
+    sd: 0.0015
+    q10: 0.0125
+    median: 0.0131
+    q90: 0.0164
+    variance_over_best_sampling_loss: 0.01
+  - size: 1.0
+    copies: 32
+    mean: 0.0137
+    sd: 0.0027
+    q10: 0.0111
+    median: 0.013
+    q90: 0.0166
+    variance_over_best_sampling_loss: 0.03
+  - size: 2.0
+    copies: 32
+    mean: 0.0136
+    sd: 0.0036
+    q10: 0.0096
+    median: 0.0134
+    q90: 0.017
+    variance_over_best_sampling_loss: 0.06
+  - size: 4.0
+    copies: 32
+    mean: 0.0149
+    sd: 0.0043
+    q10: 0.01
+    median: 0.0152
+    q90: 0.0212
+    variance_over_best_sampling_loss: 0.08
+  - size: 8.0
+    copies: 32
+    mean: 0.0151
+    sd: 0.0072
+    q10: 0.0074
+    median: 0.0137
+    q90: 0.0267
+    variance_over_best_sampling_loss: 0.21
+  fine: []
+  taken_from: 'att-c: no size up to 8 spreads this network''s copies enough (it is right about as often as chance,
+    copy or not), so it has the share and the size of the network it stands next to'
