@@ -1,8 +1,7 @@
 # The model rnn-b: a recurrent network with one layer of 4 units, a ReLU and no biases, reading three real
 # numbers; 32 weights. A small model for smoke runs and tests: a forward pass is 78 operations.
-# Its networks are published ones (withheld/rnn/convert.py).
 # Sizes, the data set, the task and the networks; change values here, never in code.
-# Which network is which and how often each gives the task's answer is in withheld/rnn-b/.
+# Where the networks come from, which is which and how often each gives the task's answer are in withheld/rnn-b/.
 name: rnn-b
 sizes:
   n_ctx: 3       # numbers per input
@@ -18,12 +17,12 @@ data_set:
 task:
   says: >
     The task's answer for an input is the position of its second-largest number: the i for which exactly one
-    of the three numbers is larger than x_i. The network gives the task's answer on most inputs, not on all.
+    of the three numbers is larger than x_i.
 weights:                # as stored in the zoo and as the agent sees them: name and shape
   input: [4, 1]
   recurrent: [4, 4]
   readout: [3, 4]
-# Five networks of the same design and sizes, trained by one recipe with five seeds.
+# Five networks of the same design and sizes: rnn-b-s0 is the run's network, the others are held out.
 networks:
   - id: rnn-b-s0
     weights: zoo/rnn-b-s0.npz

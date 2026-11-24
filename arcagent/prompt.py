@@ -92,13 +92,23 @@ def restart_note(session) -> str:
                                submit_all=budgets["submit_estimator"], saved=saved, submitted=submitted)
 
 
+def estimator_doc(model) -> str:
+    """The estimator guide (agent_docs/ESTIMATOR.md) for this model: its example reads the model's first weight, and
+    its price table gives what drawing one of the data set's inputs costs."""
+    name = next(iter(model.config["weights"]))
+    example = f'W = g.weight("{name}")'
+    text = ESTIMATOR_DOC.read_text().strip()
+    return (text.replace('W = g.weight("{{A_WEIGHT}}"){{PAD}}', example + " " * max(1, 35 - len(example)))
+            .replace("{{INPUT_OPS}}", f"{model.input_ops():,}"))
+
+
 def build(cfg: dict, model, round_no: int, rounds: list, forward_ops: int) -> str:
     template = (TEMPLATES / f"{cfg['prompt_template']}.md").read_text()
     sizes = ", ".join(f"{k} = {v}" for k, v in model.sizes.items()) + f", outputs: {model.config['n_outputs']}"
     fields = {
         "ROUND": round_no, "ROUNDS_MAX": cfg["rounds_max"], "MODEL_SOURCE": model.source().strip(), "SIZES": sizes,
         "TASK": model.task_text(), "TASK_SOURCE": model.task_source().strip(), "DATA_SET": model.data_set_text(),
-        "MODEL_OPS": f"{forward_ops:,}", "ESTIMATOR_DOC": ESTIMATOR_DOC.read_text().strip(),
+        "MODEL_OPS": f"{forward_ops:,}", "ESTIMATOR_DOC": estimator_doc(model),
         "REFERENCE_INPUTS": f"{int(cfg['verifier']['reference_inputs']):,}", "RUNS": f"{int(cfg['verifier']['runs']):,}",
         "REWARD_FORMULA": rewards.formula(cfg["reward"]), "REWARD_EXPLANATION": rewards.explanation(cfg["reward"]),
         "PYTHON_CALLS": cfg["session"]["python_calls"], "PYTHON_SECONDS": cfg["python"]["time_limit_s"],

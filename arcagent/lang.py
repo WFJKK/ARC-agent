@@ -20,7 +20,8 @@ otherwise:
     softmax                                                                     3
     take(x, idx, axis)    reading numbers                                       1 per entry read
     gather(x, i.., axes)  reading at scalar positions                           1 per entry read
-    take_sum(x, idx, axis)  the sum of the slices at idx                        (slice entries) x len(idx)
+    take_sum(x, idx, axis)  the sum of the slices at idx (a vector, or a batch  (slice entries) x len(idx)
+                          of vectors along its last axis)                       per sum
     svd_u svd_s svd_vt    of an m x n matrix, charged once for the three        4 * m * n * min(m, n)
     cast                  to whole numbers, floats or booleans                  1
     normal uniform integers   a random draw                                     1 per number drawn
@@ -281,14 +282,17 @@ def apply(node: dict, args: list, weights: dict, rng=None, svd_store: dict | Non
         out = np.take(x, idx, axis=ax)
         return out, int(out.size)
     if op == "take_sum":
+        # A matrix applied to a sum of one-hot vectors: the sum of the slices of x at the positions idx. idx may be a
+        # batch of such vectors (its last axis), whose sums come out in its place, one per vector.
         x, idx = args
         ax = _axis(node, x.ndim)
-        if idx.ndim != 1 or idx.size == 0:
-            raise EntryError("take_sum: the index must be a non-empty vector")
+        if idx.ndim == 0 or idx.size == 0:
+            raise EntryError("take_sum: the index must be a non-empty vector, or a batch of them along its last axis")
         _int_index(idx, x.shape[ax], "take_sum")
         _guard(int(idx.size) * int(x.size // max(x.shape[ax], 1)))
-        out = np.take(x, idx, axis=ax).sum(axis=ax)
-        return _norm(out), int(out.size) * int(idx.size)
+        k = int(idx.shape[-1])
+        out = np.take(x, idx, axis=ax).sum(axis=ax + idx.ndim - 1)
+        return _norm(out), int(out.size) * k
     if op == "gather":
         x, *idxs = args
         axes = node.get("axes")
@@ -617,25 +621,74 @@ def run_estimator(entry: dict, weights: dict, runs: int, master: int, deadline: 
 
 
 # data sets -----------------------------------------------------------------------------------
-# A model says what its data set is (config.yaml: data_set). Two kinds:
+# A model says what its data set is (config.yaml: data_set). Three kinds, as in level 1:
+#   all       an input is one token per position, each uniform over the position's size in the input space;
+#             every input of the input space is as likely as any other
+#   lengths   an input has a varying number of tokens: a number is drawn from `lengths` (each as likely as any
+#             other), then that many tokens below `vocab`; they fill the first slots, and the rest hold the
+#             value `empty`
 #   normal    an input is real numbers, one per position (the input space says `real` for each), each drawn
 #             from the standard normal distribution on its own
-#   all       an input is one token per position, each uniform over the position's size in the input space
-KINDS = ("normal", "all")
+KINDS = ("all", "lengths", "normal")
 
 
 def data_set_kind(data_set) -> str:
     kind = (data_set or {}).get("kind", "all")
     if kind not in KINDS:
-        raise ValueError(f"a data set is of kind {' or '.join(KINDS)}, not {kind!r}")
+        raise ValueError(f"a data set is of kind {', '.join(KINDS[:-1])} or {KINDS[-1]}, not {kind!r}")
     return kind
+
+
+def _lengths(data_set, slots: int) -> list:
+    lengths = [int(k) for k in data_set["lengths"]]
+    if not lengths or min(lengths) < 1 or max(lengths) > slots or len(set(lengths)) != len(lengths):
+        raise ValueError("a data set's lengths must be distinct and fit the model's slots")
+    return lengths
+
+
+def count_inputs(data_set, input_space) -> int | None:
+    """How many different inputs the data set holds; None when there are infinitely many."""
+    kind = data_set_kind(data_set)
+    if kind == "normal":
+        return None
+    if kind == "all":
+        return int(np.prod([int(n) for n in input_space], dtype=object))
+    return int(sum(int(data_set["vocab"]) ** k for k in _lengths(data_set, len(input_space))))
 
 
 def draw_inputs(data_set, input_space, n: int, rng) -> np.ndarray:
     """n inputs drawn from the data set with a numpy generator, one row each (for exploring in plain numpy)."""
-    if data_set_kind(data_set) == "normal":
+    kind = data_set_kind(data_set)
+    if kind == "normal":
         return rng.standard_normal((n, len(input_space)))
-    return np.stack([rng.integers(0, int(k), size=n) for k in input_space], axis=1).astype(np.int64)
+    if kind == "all":
+        return np.stack([rng.integers(0, int(k), size=n) for k in input_space], axis=1).astype(np.int64)
+    slots = len(input_space)
+    lengths = np.array(_lengths(data_set, slots))
+    length = rng.choice(lengths, size=n)
+    x = rng.integers(0, int(data_set["vocab"]), size=(n, slots))
+    x[np.arange(slots)[None, :] >= length[:, None]] = int(data_set["empty"])
+    return x.astype(np.int64)
+
+
+def enumerate_inputs(data_set, input_space):
+    """Every input of a data set that can be listed, in groups that are each as likely as the others within
+    them: yields (inputs, the probability of each). For kind all, one group; for kind lengths, one per number of
+    tokens."""
+    kind = data_set_kind(data_set)
+    if kind == "normal":
+        raise ValueError("a data set of real numbers cannot be listed")
+    if kind == "all":
+        x = np.indices([int(n) for n in input_space]).reshape(len(input_space), -1).T.astype(np.int64)
+        yield x, 1.0 / len(x)
+        return
+    slots, vocab = len(input_space), int(data_set["vocab"])
+    lengths = _lengths(data_set, slots)
+    for k in lengths:
+        tokens = np.indices([vocab] * k).reshape(k, -1).T.astype(np.int64)
+        x = np.full((len(tokens), slots), int(data_set["empty"]), dtype=np.int64)
+        x[:, :k] = tokens
+        yield x, 1.0 / (len(lengths) * len(x))
 
 
 # the builder ---------------------------------------------------------------------------------
@@ -844,14 +897,28 @@ class Graph:
         return self._random("integers", shape, high=int(high))
 
     def inputs(self, n: int) -> Expr:
-        """n inputs drawn from the data set, fresh in every run, one row each: (n, numbers per input), at 1 per
-        number drawn."""
+        """n inputs drawn from the data set, fresh in every run, one row each: (n, numbers per input). Drawing costs
+        1 per number drawn; for a data set of varying lengths, the number of tokens is drawn too, and the empty slots
+        are filled by a comparison and a where per slot."""
         if not self.input_space:
             raise ValueError("this graph was made without the data set; make it with graph()")
-        if data_set_kind(self.data_set) == "normal":
-            return self.normal([int(n), self.n_ctx])
-        cols = [self.integers(int(k), [int(n), 1]) for k in self.input_space]
-        return concat(cols, axis=1)
+        n, kind = int(n), data_set_kind(self.data_set)
+        if kind == "normal":
+            return self.normal([n, self.n_ctx])
+        if kind == "all":
+            if len(set(self.input_space)) == 1:
+                return self.integers(int(self.input_space[0]), [n, self.n_ctx])
+            return concat([self.integers(int(k), [n, 1]) for k in self.input_space], axis=1)
+        lengths = _lengths(self.data_set, self.n_ctx)
+        tokens = self.integers(int(self.data_set["vocab"]), [n, self.n_ctx])
+        if lengths == [self.n_ctx]:
+            return tokens  # every slot holds a token
+        if lengths == list(range(lengths[0], lengths[0] + len(lengths))):
+            length = self.integers(len(lengths), [n]) + lengths[0]
+        else:
+            length = take(self.const(lengths), self.integers(len(lengths), [n]), axis=0)
+        empty = self.arange(self.n_ctx)[None, :] >= length[:, None]
+        return where(empty, int(self.data_set["empty"]), tokens)
 
     def wrap(self, x) -> Expr:
         if isinstance(x, Expr):

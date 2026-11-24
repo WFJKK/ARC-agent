@@ -4,7 +4,8 @@ agent is given.
 A model folder (models/<name>/) holds
 
     config.yaml   sizes, the input space, the data set and the task (each with the sentence the agent is told),
-                  the weights' names and shapes, the networks (id, file, sha256)
+                  the weights' names and shapes, the networks (id, file, sha256), and optionally max_batch, the
+                  most inputs the network is run on at once within the language's limits (32,768 if not said)
     model.py      logits(g, lang, x) and forward(g, lang, x): the network on a batch of inputs, in the language
     task.py       answer(g, lang, x): the task's answer on a batch of inputs, in the language
     zoo/*.npz     the networks' weights (no pickle)
@@ -59,6 +60,11 @@ class Model:
         self.input_space = space if self.real else [int(n) for n in space]
         if len(self.input_space) != self.n_ctx:
             raise ModelError("input_space needs one entry per position")
+        try:
+            self.n_total = lang.count_inputs(self.data_set, self.input_space)  # None: infinitely many
+        except (ValueError, KeyError) as exc:
+            raise ModelError(f"the data set of {self.name} is not well described: {exc}") from None
+        self.max_batch = int(self.config.get("max_batch") or 32768)
         if not self.data_set.get("says") or not (self.config.get("task") or {}).get("says"):
             raise ModelError("a model needs the sentences the agent is told about its data set and its task "
                              "(data_set.says, task.says)")
@@ -144,6 +150,17 @@ class Model:
             raise ModelError("the task's cost on a batch is not the batch size times its cost on one input")
         return one
 
+    def input_ops(self) -> int:
+        """The operations of drawing one input with g.inputs: its draws, and for a data set of varying lengths the
+        operations that empty the slots past the last token. The same for every input; checked on 1, 2 and 4."""
+        def ops(n):
+            g = lang.Graph({}, self.data_set, self.input_space)
+            return lang.Evaluator(g.entry(g.inputs(n)[0, 0]), {}).run([0])["ops"]
+        one, two, four = ops(1), ops(2), ops(4)
+        if four - two != 2 * (two - one):
+            raise ModelError("drawing inputs does not cost the same for every input")
+        return two - one
+
     def monte_carlo(self, weights: dict, n: int) -> dict:
         """Plain sampling as an estimator: n inputs drawn afresh in every run, the share on which the network gives
         the task's answer. It costs n times (the draws, a forward pass, the answer and one comparison) plus the
@@ -159,25 +176,57 @@ class Model:
         b = lang.Evaluator(self.monte_carlo(weights, 2), weights).run([0])["ops"]
         return b - a
 
+    def outputs(self, weights: dict, x, chunk: int | None = None) -> tuple:
+        """The network's outputs and the task's answers on the inputs x (a numpy array, one row each), computed with
+        model.forward and task.answer through the interpreter, chunk inputs at a time."""
+        x = np.asarray(x)
+        chunk = int(chunk or self.max_batch)
+        got, want = [], []
+        for i in range(0, len(x), chunk):
+            g = self.graph(weights)
+            xs = g.const(x[i:i + chunk])
+            both = lang.stack([self.module().forward(g, lang, xs), self.task_module().answer(g, lang, xs)], axis=0)
+            v = lang.Evaluator(g.entry(both), weights).run([0])["estimate"]
+            got.append(v[0])
+            want.append(v[1])
+        return np.concatenate(got), np.concatenate(want)
+
+    def effective_chunk(self, chunk: int) -> int:
+        """The chunk of a measurement, no larger than the network can be run on at once."""
+        return min(int(chunk), self.max_batch)
+
     def accuracy(self, weights: dict, n: int, seed: int, chunk: int = 32768) -> dict:
-        """How often the network gives the task's answer, measured by running it on n inputs drawn from the data set
-        with the seed, chunk inputs at a time: chunk k is monte_carlo(chunk) run with the seed [seed, k]. The network
-        and the task are run through the interpreter, as an estimator would run them."""
-        n, chunk = int(n), int(chunk)
+        """How often the network gives the task's answer, through the interpreter, as an estimator would run them.
+
+        A data set that can be listed and has at most n inputs is measured exactly, on every input, each weighted
+        by how likely it is (method exact). Otherwise the network is run on n inputs drawn from the data set with
+        the seed, chunk inputs at a time: chunk k is monte_carlo(chunk) run with the seed [seed, k] (method
+        sample)."""
+        n, chunk = int(n), self.effective_chunk(chunk)
+        if self.n_total is not None and self.n_total <= n:
+            total, correct, groups = 0.0, 0, []
+            for x, p in lang.enumerate_inputs(self.data_set, self.input_space):
+                out, ans = self.outputs(weights, x, chunk)
+                k = int((out == ans).sum())
+                total += k * p
+                correct += k
+                groups.append({"inputs": int(len(x)), "correct": k, "probability_each": p})
+            return {"accuracy": float(total), "correct": correct, "n": n, "seed": int(seed), "chunk": chunk,
+                    "method": "exact", "inputs": int(self.n_total), "groups": groups, "standard_error": 0.0}
         if n < 1 or chunk < 1 or n % chunk:
             raise ValueError("the inputs must be a positive multiple of the chunk")
         runs = n // chunk
         r = lang.run_estimator(self.monte_carlo(weights, chunk), weights, runs, int(seed))
         correct = int(sum(int(round(e * chunk)) for e in r["estimates"]))
         a = correct / n
-        return {"accuracy": a, "correct": correct, "n": n, "seed": int(seed), "chunk": chunk,
-                "standard_error": math.sqrt(a * (1 - a) / n)}
+        return {"accuracy": a, "correct": correct, "n": n, "seed": int(seed), "chunk": chunk, "method": "sample",
+                "inputs": n, "standard_error": math.sqrt(a * (1 - a) / n)}
 
     # what the agent is given about the network besides its weights, model.py and task.py
     def info(self) -> dict:
         return {"sizes": self.sizes, "input_space": self.input_space, "n_outputs": int(self.config["n_outputs"]),
                 "weights": {k: list(v) for k, v in self.config["weights"].items()},
-                "data_set": {k: v for k, v in self.data_set.items() if k != "says"}}
+                "data_set": {k: v for k, v in self.data_set.items() if k != "says"}, "max_batch": self.max_batch}
 
     # the verifier's side only
     def withheld(self) -> Path:

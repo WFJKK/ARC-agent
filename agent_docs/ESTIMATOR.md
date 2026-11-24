@@ -9,7 +9,7 @@ code, so only the operations below exist.
 
 ```python
 g = graph()                        # a new lang.Graph on this network's weights
-R = g.weight("recurrent")          # a weight matrix, by name
+W = g.weight("{{A_WEIGHT}}"){{PAD}}# a weight, by name (the names are under "The network")
 c = g.const([1.0, 2.0])            # a constant; plain Python numbers and numpy arrays become constants too
 x = g.inputs(100)                  # 100 inputs drawn from the data set, fresh in every run: (100, numbers per input)
 z = g.normal([5, 3])               # standard normal numbers, fresh in every run; also g.uniform, g.integers
@@ -67,13 +67,14 @@ Each operation on numbers costs 1. Per entry of the result unless said otherwise
 | `lang.take_sum(x, v, axis)`: the sum of the slices of x at the positions v | slice entries times len(v) |
 | `lang.svd(x)` of an m x n matrix: `(u, s, vt)` | 4 * m * n * min(m, n), once for the three |
 | `lang.cast(x, "int")`, `"float"`, `"bool"` | 1 |
-| `g.inputs(n)`, `g.normal(shape)`, `g.uniform(shape)`, `g.integers(high, shape)` | 1 per number drawn |
+| `g.inputs(n)`: n inputs of the data set | {{INPUT_OPS}} per input: its draws, and for inputs of varying lengths the operations that empty the slots past the last token |
+| `g.normal(shape)`, `g.uniform(shape)`, `g.integers(high, shape)` | 1 per number drawn |
 | `g.weight`, `g.const`, `g.arange` | 0 |
 | `x.reshape(...)`, `x.T`, `lang.transpose`, `x[2]`, `x[1:5]`, `x[None]`, `lang.concat`, `lang.stack` | 0 |
 
 Reading costs 1 per number read: `T[a, b]` reads one number, `T[:, a]` a whole column. The network
-on n inputs, `model.forward(g, lang, x)`, costs n forward passes; `task.answer(g, lang, x)` costs what
-its sort costs.
+on n inputs, `model.forward(g, lang, x)`, costs n forward passes; `task.answer(g, lang, x)` costs n times
+what its docstring says.
 
 ### What an estimator's cost is
 

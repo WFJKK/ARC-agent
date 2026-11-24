@@ -124,4 +124,5 @@ def test_a_model_folder_is_checked(rnn_b, tmp_path):
     with pytest.raises(ModelError, match="sentences the agent is told"):
         load_model(bad)
     info = rnn_b.info()
-    assert set(info) == {"sizes", "input_space", "n_outputs", "weights", "data_set"} and "says" not in info["data_set"]
+    assert set(info) == {"sizes", "input_space", "n_outputs", "weights", "data_set", "max_batch"}
+    assert "says" not in info["data_set"] and info["max_batch"] == 32768

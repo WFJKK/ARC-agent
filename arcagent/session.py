@@ -93,7 +93,7 @@ def make_result(weights, info, extra):
         """n inputs drawn from the data set with numpy.random.default_rng(seed), one row each."""
         return lang.draw_inputs(info["data_set"], info["input_space"], int(n), np.random.default_rng(seed))
 
-    def outputs(x, chunk=32768):
+    def outputs(x, chunk=info["max_batch"]):
         """The network's outputs and the task's answers on the inputs x (a numpy array, one row each), computed
         with model.forward and task.answer through the interpreter."""
         x = np.asarray(x)

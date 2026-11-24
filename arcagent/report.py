@@ -33,6 +33,14 @@ def _c(x) -> str:
     return "" if x is None else f"{x:.2f}"
 
 
+def _how(ref: dict) -> str:
+    """How an accuracy was measured, in words."""
+    if ref.get("method") == "exact":
+        return f"exactly, on all {ref['inputs']:,} inputs of the data set"
+    return (f"on {ref['n']:,} inputs drawn with seed {ref['seed']}, standard error "
+            f"{100 * ref['standard_error']:.4f} points")
+
+
 def _reward(cfg: dict) -> str:
     params = ", ".join(f"{'lambda' if k == 'lam' else k} = {v:g}" for k, v in sorted(cfg.items()) if k != "name")
     return f"`{cfg.get('name', 'r_lambda')}`" + (f", {params}" if params else "")
@@ -128,9 +136,8 @@ def write(path: Path) -> dict:
               f"- Reward {_reward(cfg['reward'])}; {int(cfg['verifier']['runs']):,} runs per scoring; a forward pass is "
               f"{run['forward_ops']:,} operations, one more sampled input {run['sample_ops']:,} ({run['sample_ops'] / run['forward_ops']:.4f} "
               f"forward passes).",
-              f"- The network's accuracy as the verifier measured it: {A:.6f} on {refs[net]['n']:,} inputs (seed {refs[net]['seed']}), "
-              f"standard error {100 * refs[net]['standard_error']:.4f} points. The agent is not shown it." if A is not None else
-              "- The network's accuracy: not measured.", ""]
+              f"- The network's accuracy as the verifier measured it: {A:.6f} {_how(refs[net])}. The agent is not shown it."
+              if A is not None else "- The network's accuracy: not measured.", ""]
 
     # the submissions
     lines += ["## Submissions", ""]
@@ -251,7 +258,7 @@ def model_references(model_path: str, network: str, runs: int, lam: float, sizes
     v = Verifier(m, network, {"reward": {"name": "r_lambda", "lam": lam}, "verifier": {"runs": runs}})
     ref = v.reference()
     A = ref["accuracy"]
-    out(f"{network}: accuracy {A:.6f} on {ref['n']:,} inputs (seed {ref['seed']}); forward pass {v.F:,} operations; "
+    out(f"{network}: accuracy {A:.6f}, {_how(ref)}; forward pass {v.F:,} operations; "
         f"one more sampled input {v.sample_ops / v.F:.4f} forward passes")
     ests = dict(m.reference_entries(v.weights))
     best = max(1, round(math.sqrt(A * (1 - A) / (lam * v.sample_ops / v.F)))) if lam > 0 else None

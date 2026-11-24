@@ -156,7 +156,8 @@ def verifier_for(path: Path, cfg: dict, model, network: str, log=None) -> Verifi
     r = v.reference()
     append_jsonl(Path(path) / REFERENCES, {**r, "at": now()})
     if log:
-        log(f"  the accuracy of {network}: measured on {r['n']:,} inputs (kept in {REFERENCES}, never shown to the agent)")
+        how = f"exactly, on all {r['inputs']:,} of its inputs" if r.get("method") == "exact" else f"on {r['n']:,} inputs"
+        log(f"  the accuracy of {network}: measured {how} (kept in {REFERENCES}, never shown to the agent)")
     return v
 
 

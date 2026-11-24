@@ -1,9 +1,8 @@
 # The model rnn-g: a recurrent network with one layer of 16 units, a ReLU and no biases, reading ten real
-# numbers; 432 weights. Its networks are published ones (withheld/rnn/convert.py) and noised copies of the
-# first (withheld/rnn-g/noise.py).
+# numbers; 432 weights.
 # Sizes, the data set, the task and the networks; change values here, never in code.
-# Which network is which and how often each gives the task's answer is not in this folder: it is in
-# withheld/rnn-g/, which no tool of the agent reaches. The agent is given model.py, task.py and the sentences
+# Where the networks come from, which is which and how often each gives the task's answer are not in this
+# folder: they are in withheld/rnn-g/, which no tool of the agent reaches. The agent is given model.py, task.py and the sentences
 # under `says`, and the weights of the network of its run.
 name: rnn-g
 sizes:
@@ -20,13 +19,12 @@ data_set:
 task:
   says: >
     The task's answer for an input is the position of its second-largest number: the i for which exactly one
-    of the ten numbers is larger than x_i. The network gives the task's answer on most inputs, not on all.
+    of the ten numbers is larger than x_i.
 weights:                # as stored in the zoo and as the agent sees them: name and shape
   input: [16, 1]
   recurrent: [16, 16]
   readout: [10, 16]
-# s0 is the run's network. The others are the held-out networks of the report: z0 to z4 of the same design and
-# sizes, trained by one recipe with five seeds; n1 to n3 are s0 with noise added to its weights.
+# s0 is the run's network; the others, of the same design and sizes, are the held-out networks of the report.
 networks:
   - id: rnn-g-s0
     weights: zoo/rnn-g-s0.npz

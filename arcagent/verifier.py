@@ -77,7 +77,7 @@ class Verifier:
     def wanted(self) -> dict:
         """The reference measurement this verifier's config asks for."""
         return {"n": int(self.cfg["reference_inputs"]), "seed": int(self.cfg["reference_seed"]),
-                "chunk": int(self.cfg["reference_chunk"])}
+                "chunk": self.model.effective_chunk(int(self.cfg["reference_chunk"]))}
 
     def set_reference(self, ref: dict) -> None:
         """Take a measurement made before (a run folder keeps them), if it is the one this config asks for."""
@@ -86,8 +86,8 @@ class Verifier:
         self._reference = dict(ref)
 
     def reference(self) -> dict:
-        """The network's accuracy as the verifier measures it: {"accuracy", "correct", "n", "seed", "chunk",
-        "standard_error", "network"}."""
+        """The network's accuracy as the verifier measures it: {"accuracy", "correct", "n", "seed", "chunk", "method",
+        "inputs", "standard_error", "network"}; method exact when every input of the data set was run."""
         if self._reference is None:
             w = self.wanted()
             r = self.model.accuracy(self.weights, w["n"], w["seed"], w["chunk"])

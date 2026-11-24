@@ -83,6 +83,52 @@ def test_reading_is_charged_per_entry_read(toy):
     assert np.allclose(val, T[:, K[0, 0]] + T[:, K[0, 1]]) and ops == 12
 
 
+def test_take_sum_adds_a_batch_of_index_vectors(toy):
+    """With a matrix of indices, one sum per row of it: what a linear network does with a batch of inputs."""
+    T, K = toy["T"], toy["K"]
+    val, ops, _ = one_run(lambda g: lang.take_sum(g.weight("T"), g.weight("K")[:4, :3], axis=1), toy)
+    assert val.shape == (6, 4) and ops == 6 * 4 * 3
+    assert np.allclose(val, np.stack([T[:, K[b, :3]].sum(axis=1) for b in range(4)], axis=1))
+    val, ops, _ = one_run(lambda g: lang.take_sum(g.weight("T"), g.weight("K")[:4, :3], axis=0), toy)
+    assert val.shape == (4, 6) and ops == 4 * 6 * 3
+    assert np.allclose(val, np.stack([T[K[b, :3]].sum(axis=0) for b in range(4)]))
+    with pytest.raises(EntryError, match="non-empty vector"):
+        one_run(lambda g: lang.take_sum(g.weight("T"), g.weight("K")[0, 0], axis=1), toy)
+
+
+@pytest.mark.parametrize("lengths", [[1, 2, 3], [1, 3]])
+def test_inputs_of_varying_lengths(lengths):
+    """The number of tokens is drawn first, as likely as each other; the tokens fill the first slots and the slots
+    past them hold the empty value. An input costs its draws, the length's one operation, and per slot a comparison
+    and a where."""
+    ds = {"kind": "lengths", "lengths": lengths, "vocab": 5, "empty": 5}
+    g = Graph({}, ds, [6, 6, 6], seed=3)
+    r = Evaluator(g.entry(g.inputs(30000)), {}).run([3])
+    x, k = r["estimate"], (r["estimate"] != 5).sum(axis=1)
+    assert sorted(set(k.tolist())) == lengths
+    assert all((x[k == n][:, :n] < 5).all() and (x[k == n][:, n:] == 5).all() for n in lengths)
+    assert np.allclose(np.bincount(k, minlength=4)[lengths] / 30000, 1 / len(lengths), atol=0.015)
+    assert np.allclose(np.bincount(x[x < 5], minlength=5) / (x < 5).sum(), 0.2, atol=0.01)
+    assert r["draws"] == 30000 * 4 and r["ops"] == 30000 * (3 * 3 + 2)
+    full = Graph({}, {"kind": "lengths", "lengths": [3], "vocab": 5, "empty": 5}, [6, 6, 6])
+    r = Evaluator(full.entry(full.inputs(10)), {}).run([0])
+    assert (r["estimate"] < 5).all() and r["ops"] == 30  # every slot holds a token: only the draws
+
+
+def test_a_data_set_that_can_be_listed_is_listed_with_each_inputs_probability():
+    ds = {"kind": "lengths", "lengths": [1, 2], "vocab": 3, "empty": 3}
+    groups = list(lang.enumerate_inputs(ds, [4, 4]))
+    assert lang.count_inputs(ds, [4, 4]) == 3 + 9 == sum(len(x) for x, _ in groups)
+    assert [len(x) for x, _ in groups] == [3, 9] and math.isclose(sum(len(x) * p for x, p in groups), 1.0)
+    assert groups[0][1] == 1 / 6 and groups[1][1] == 1 / 18 and (groups[0][0][:, 1] == 3).all()
+    assert len({tuple(row) for x, _ in groups for row in x}) == 12
+    (x, p), = lang.enumerate_inputs({"kind": "all"}, [2, 3])
+    assert x.shape == (6, 2) and p == 1 / 6 and lang.count_inputs({"kind": "all"}, [2, 3]) == 6
+    assert lang.count_inputs({"kind": "normal"}, ["real"]) is None
+    with pytest.raises(ValueError, match="cannot be listed"):
+        list(lang.enumerate_inputs({"kind": "normal"}, ["real"]))
+
+
 def test_moving_data_and_sources_are_free(toy):
     A = toy["A"]
     for build_fn, expect in (

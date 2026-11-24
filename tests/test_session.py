@@ -41,8 +41,8 @@ def test_run_python_hands_the_code_what_it_needs_and_keeps_what_it_saves(session
     out = session.run_python(CODE)
     lines = out["output"].splitlines()
     assert out["status"] == "ok", out["output"]
-    assert lines[0] == ("['data_set', 'forward_ops', 'input_space', 'limits', 'n_outputs', 'reference_inputs', 'runs', 'sizes', "
-                        "'weights'] 78 128 {'max_nodes': 400, 'max_const_scalars': 256}")
+    assert lines[0] == ("['data_set', 'forward_ops', 'input_space', 'limits', 'max_batch', 'n_outputs', 'reference_inputs', "
+                        "'runs', 'sizes', 'weights'] 78 128 {'max_nodes': 400, 'max_const_scalars': 256}")
     assert lines[1] == "['best']" and lines[2] == "(1000, 3) (1000,) True"
     assert lines[3] == f"{[16 * 89 / 78] * 5} {[48] * 5}"
     assert lines[4] == "True" and out["saved_estimators"] == ["sixteen"]
