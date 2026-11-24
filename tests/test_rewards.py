@@ -63,4 +63,5 @@ def test_the_texts_for_the_prompt():
     assert "as much as 1000 forward passes" in rewards.explanation({"name": "r_lambda", "lam": 1e-7})
     w = rewards.warnings(cfg)
     assert len(w) == 1 and "written in as a constant" in w[0]
+    assert rewards.warnings(cfg, on_copies=True) == []  # on copies of the network that number does not win
     assert any("compute is free" in x for x in rewards.warnings({"name": "r_lambda", "lam": 0}))

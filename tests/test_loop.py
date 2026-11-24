@@ -264,6 +264,7 @@ def test_on_copies_the_number_read_off_the_network_loses_and_a_sampler_is_locked
     alone = lock["on_the_network"]
     assert alone["status"] == "scored" and "copies" not in alone["parts"] and alone["runs"] == 256
     assert any("every scoring on 32 copies of the network drawn afresh" in line for line in lines)
+    assert not any("WARNING: the reward" in line for line in lines)  # the warning of a run on the network itself
     assert any("the locked estimator on the network itself: reward" in line for line in lines)
     assert loop.finish(path, out=lambda *_: None) == lock  # from the records alone: nothing is measured again
 

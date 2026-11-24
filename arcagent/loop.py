@@ -263,7 +263,7 @@ def start(cfg: dict, fake_scripts=None, out=print) -> Path:
         pass
     check_probe(sb, report)
     check_probe(sb, guarded)
-    for w in rewards.warnings(cfg["reward"]):
+    for w in rewards.warnings(cfg["reward"], on_copies=verifier.copies is not None):
         log(f"WARNING: the reward: {w}")
     if not sb.hardened:
         log("WARNING: the sandbox is in process mode: only a guard inside Python keeps the agent's code from your files, "

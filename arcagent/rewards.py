@@ -78,8 +78,9 @@ def lam_of(cfg: dict) -> float | None:
     return float(params["lam"]) if "lam" in params else None
 
 
-def warnings(cfg: dict) -> list:
-    """What a reward block invites, in words, for the run's log."""
+def warnings(cfg: dict, on_copies: bool = False) -> list:
+    """What a reward block invites, in words, for the run's log. on_copies: the run scores on copies of its network,
+    where a number written into an estimator does not win."""
     name, params = _filled(cfg)
     out = []
     if "lam" in params:
@@ -87,9 +88,10 @@ def warnings(cfg: dict) -> list:
         if lam <= 0:
             out.append(f"lambda = {lam:g}: compute is free, so the best estimator runs the network on as many inputs "
                        "as the time limit allows")
-        out.append("the reward scores only the estimate and its cost on this one network: a number measured on it "
-                   "by sampling outside the estimator and written in as a constant scores near the top. The held-out "
-                   "networks in the report are what shows it")
+        if not on_copies:
+            out.append("the reward scores only the estimate and its cost on this one network: a number measured on it "
+                       "by sampling outside the estimator and written in as a constant scores near the top. The held-out "
+                       "networks in the report are what shows it (verifier.copies scores on copies of the network instead)")
     return out
 
 
