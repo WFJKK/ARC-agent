@@ -203,8 +203,11 @@ def test_a_whole_run_on_networks_of_tokens(pilot, exact, tmp_path):
         assert all(r["method"] == "exact" and r["inputs"] == exact for r in refs.values())
         assert any(f"measured exactly, on all {exact:,} of its inputs" in line for line in lines)
         assert f"exactly, on all {exact:,} inputs of the data set" in (path / "report.md").read_text()
+        told = f"runs the network on\nevery one of the data set's {exact:,} inputs, each weighted by how often it is drawn,"
     else:
         assert all(r["method"] == "sample" and r["n"] == 2**16 for r in refs.values())
+        told = "runs the network on\n65,536 inputs it draws from the data set and counts"
+    assert told in (path / "round_001" / "prompt.md").read_text()  # the agent is told how A is measured
     (rd,) = loop.completed(path)
     s32, c09 = rd["submissions"]
     from arcagent.networks import load_model

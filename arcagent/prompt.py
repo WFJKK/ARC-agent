@@ -102,6 +102,15 @@ def estimator_doc(model) -> str:
             .replace("{{INPUT_OPS}}", f"{model.input_ops():,}"))
 
 
+def reference_inputs(cfg: dict, model) -> str:
+    """The inputs the verifier measures A on, in words: all of them when the data set has no more than it would draw
+    (Model.accuracy)."""
+    n = int(cfg["verifier"]["reference_inputs"])
+    if model.n_total is not None and model.n_total <= n:
+        return f"every one of the data set's {model.n_total:,} inputs, each weighted by how often it is drawn,"
+    return f"{n:,} inputs it draws from the data set"
+
+
 def build(cfg: dict, model, round_no: int, rounds: list, forward_ops: int) -> str:
     template = (TEMPLATES / f"{cfg['prompt_template']}.md").read_text()
     sizes = ", ".join(f"{k} = {v}" for k, v in model.sizes.items()) + f", outputs: {model.config['n_outputs']}"
@@ -109,7 +118,7 @@ def build(cfg: dict, model, round_no: int, rounds: list, forward_ops: int) -> st
         "ROUND": round_no, "ROUNDS_MAX": cfg["rounds_max"], "MODEL_SOURCE": model.source().strip(), "SIZES": sizes,
         "TASK": model.task_text(), "TASK_SOURCE": model.task_source().strip(), "DATA_SET": model.data_set_text(),
         "MODEL_OPS": f"{forward_ops:,}", "ESTIMATOR_DOC": estimator_doc(model),
-        "REFERENCE_INPUTS": f"{int(cfg['verifier']['reference_inputs']):,}", "RUNS": f"{int(cfg['verifier']['runs']):,}",
+        "REFERENCE_INPUTS": reference_inputs(cfg, model), "RUNS": f"{int(cfg['verifier']['runs']):,}",
         "REWARD_FORMULA": rewards.formula(cfg["reward"]), "REWARD_EXPLANATION": rewards.explanation(cfg["reward"]),
         "PYTHON_CALLS": cfg["session"]["python_calls"], "PYTHON_SECONDS": cfg["python"]["time_limit_s"],
         "SUBMISSIONS": cfg["session"]["submissions"], "MAX_NODES": cfg["entry"]["max_nodes"],
