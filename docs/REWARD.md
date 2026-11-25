@@ -84,10 +84,10 @@ later gets its test there first.
 | Draw once and reuse the draw as many samples | it is one draw: the run is charged for it, and the estimate is as good as one sample |
 | Paste a table of answers | the limit of 256 numbers in constants |
 | An estimate that is not a number on rare runs | refused, with the run and its seed |
-| Send one estimator again and again and keep the luckiest scoring | the lock is scored once more with a fresh seed, and the report gives that number |
+| Send one estimator again and again and keep the luckiest scoring (the first attention pilot did, three times in its last round) | every submission of a run is scored with the run's one seed, on the same copies with the same draws, and an estimator the run has scored is refused without spending a submission; the lock is scored once more with a fresh seed, and the report gives that number |
 | Read the accuracy from the receipts | the agent sees no accuracy, bias or benchmark. On one network the reward and the mse still say how far off a number is; on copies they say it of copies that are never used again |
 | Measure the accuracy beforehand and write it in | scoring on copies: the number is 8 to 23 times worse than the best plain sampling there (section 5) |
-| Learn a scoring's copies from what it reports, and answer for them next time | every scoring makes its own copies from a seed the verifier draws afresh |
+| Learn the run's copies from what its scorings report, and answer for them | a scoring reports a handful of numbers over all the copies and no accuracy, a run has at most rounds times submissions of them, the seed stays in the run folder, and the lock's second scoring is on copies drawn after the choice |
 | Carry the network's weights in as constants and look up, in a table made beforehand, what each changed weight does | nothing forbids it, and it loses to plain sampling: the changes of several weights do not add up (97 numbers for rnn-b's 32 weights; 1.1 to 3.5 times sampling's loss over five seeds) |
 
 ## 5. Scoring on copies: what the cost term cannot see, and what stops it

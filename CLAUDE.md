@@ -40,5 +40,7 @@ built on Mech-Interp-Agent-level1, and keeps its rules.
 - A run is scored on copies of its network (`arcagent/measure.py`), so that a number measured beforehand and written
   into an estimator does not win. A new network gets its `verifier.copies` (share, size) from
   `python -m arcagent.calibrate`; what that measured goes in `withheld/<model>/copies.yaml`, and runs made with
-  different shares or sizes are not compared.
+  different shares or sizes are not compared. Every submission of a run is scored with the run's one seed
+  (`scoring_seed.json` in the run folder), an estimator the run has scored is not scored again, and the figure to
+  quote for a lock is its second scoring, on fresh copies.
 - In docs: no em dashes, and keep displayed math short.

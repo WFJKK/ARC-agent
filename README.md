@@ -75,7 +75,7 @@ On this very checkpoint, the constant guess 95% missed by just 0.301 percentage 
 
 In code: `r_lambda` in [`arcagent/rewards.py`](arcagent/rewards.py), with `lam: 1.0e-6` in
 [`config/defaults.yaml`](config/defaults.yaml). The verifier ([`arcagent/verifier.py`](arcagent/verifier.py)) runs
-every submitted estimator 4,096 times, each run with the seed `[seed, k]` for a `seed` it draws afresh, and the
+every submitted estimator 4,096 times, each run with the seed `[seed, k]` for the run's `seed`, and the
 reward is the mean over the runs: $-\mathrm{mse} - \lambda \bar C$. Every receipt keeps the parts (mean squared
 error, bias, spread of the estimates, mean, least and most cost, random draws per run), so a finished run can be
 scored again under another $\lambda$ (`python -m arcagent.loop rescore`). The benchmark is computed for every
@@ -127,10 +127,15 @@ A scoring is therefore not made on that network but on **copies** of it
 - **A copy** is the network with a few of its weights changed at random: every weight is changed with probability
   `share`, by a normal draw of `size` times the root mean square of its weight matrix. The other weights stay as
   they are, bit for bit, and a weight that is exactly zero (the slot that holds no token) is never changed.
-- **Every scoring makes its own copies**, 128 of them, from a seed the verifier draws afresh. It measures each
-  copy's accuracy (65,536 inputs, or every input where the data set has no more), runs the estimator 32 times on
-  each copy, and takes a run's error against the accuracy of the copy it ran on. The reward is the same formula
-  over all 4,096 runs.
+- **Every run makes its own copies**, 128 of them, from a seed drawn once for the run and kept in the run's
+  folder, where the agent's code cannot read. The verifier measures each copy's accuracy (65,536 inputs, or every
+  input where the data set has no more), runs the estimator 32 times on each copy, and takes a run's error against
+  the accuracy of the copy it ran on. The reward is the same formula over all 4,096 runs.
+- **Every submission of a run is scored on the same copies with the same draws**, so two estimators differ by what
+  they compute and a draw of copies is nobody's luck: an estimator the run has scored is not scored again, under
+  any name, in any round. The first attention pilot showed why: in its last round the agent handed in one
+  estimator three times, and the luckiest scoring became the lock. The lock is scored once more on fresh copies,
+  and that is the figure to quote.
 - What an estimator computes from the weights follows a copy. A number written into it does not: its error is the
   distance from the copy's accuracy, whatever the number.
 - **The agent is told all of it**: how a copy is made, with the numbers, and that it never sees the verifier's
@@ -322,8 +327,9 @@ For one network (`arcagent/verifier.py`):
    seconds). A data set with at most that many inputs (lin-a's 4,096, att-a's and att-b's 4,160) is measured
    exactly instead, every input weighted by how often it is drawn. Measured once per run folder
    (`references.jsonl`); it is what the report and the held-out check use.
-2. A scoring: a seed drawn afresh, and from it 128 copies, each copy's accuracy on 65,536 inputs (or every input),
-   and the estimator 32 times on each copy. Everything follows from the one seed, so a receipt can be made again.
+2. A scoring: from the run's seed (`scoring_seed.json` in the run folder; the lock's second scoring draws its
+   own) 128 copies, each copy's accuracy on 65,536 inputs (or every input), and the estimator 32 times on each
+   copy. Everything follows from the one seed, so a receipt can be made again.
 3. The parts: mean squared error, bias, the spread of the estimates within a copy and between copies, how well
    they follow the copies' accuracies, mean and range of the cost, draws per run; the reward; the benchmark. A
    scoring takes 5 to 30 seconds, most of it the copies' accuracies.

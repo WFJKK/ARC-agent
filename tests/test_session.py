@@ -79,9 +79,14 @@ def test_submit_estimator_returns_what_the_agent_may_see(session):
     assert session.receipts()[0]["submission"] == 1
     with pytest.raises(ToolError, match="no saved estimator named 'nothing'"):
         session.submit_estimator("nothing")
-    session.submit_estimator("best")
+    with pytest.raises(ToolError, match="already scored in this run .round 1, submission 1, as 'best'"):
+        session.submit_estimator("best")           # the same estimator again: not scored, and nothing spent
+    assert session.remaining() == {"run_python": 3, "submit_estimator": 1}
+    for name, value in (("other", 0.6), ("third", 0.7)):
+        (session.saved_dir / f"{name}.json").write_text(json.dumps({**BEST, "nodes": [{**BEST["nodes"][0], "value": value}]}))
+    session.submit_estimator("other")
     with pytest.raises(ToolError, match="budget of this session"):
-        session.submit_estimator("best")
+        session.submit_estimator("third")
 
 
 def test_the_session_reads_the_accuracy_its_run_measured(session):

@@ -70,7 +70,8 @@ with the rest empty; `normal`, real numbers drawn from the standard normal distr
 within the limit per value).
 
 **Copies.** A scoring is made on copies of the run's network, each with a few weights changed at random, drawn
-afresh for every scoring (`arcagent/measure.py`; docs/REWARD.md, section 5, says why): 128 copies, each copy's
+once for the run and the same for every submission, with the lock scored once more on fresh ones
+(`arcagent/measure.py`; docs/REWARD.md, section 5, says why): 128 copies, each copy's
 accuracy measured on 65,536 inputs (every input where the data set has no more), the estimator run 32 times on
 each. How a copy is made is a network's own (`verifier.copies.share` and `size` in its pilot config, from
 `python -m arcagent.calibrate`), and the agent is told it. The steps below are a scoring on the network itself,
@@ -84,8 +85,10 @@ copy's, and the benchmark is plain sampling on the same copies.
    `verifier.reference_seed`, through the same interpreter (`networks.Model.accuracy`), kept in the run folder; a
    data set with at most that many inputs is measured exactly instead, on every input, each weighted by how often
    it is drawn (method `exact`);
-3. runs the estimator `verifier.runs` (4,096) times, run k with the seed `[seed, k]` for a seed drawn afresh from the
-   operating system for each scoring; an estimator that draws nothing is run once and repeated;
+3. runs the estimator `verifier.runs` (4,096) times, run k with the seed `[seed, k]`. A session gives the run's
+   seed, drawn from the operating system once per run (`scoring_seed.json`), so every submission meets the same
+   draws; without one the verifier draws a seed for the scoring. An estimator that draws nothing is run once and
+   repeated;
 4. returns a receipt: the parts (mean squared error, bias, spread, mean and range of the cost, draws), the reward
    under the run's reward function, and the benchmark (plain sampling at the same cost; the best plain sampling
    under the reward).

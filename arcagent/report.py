@@ -165,11 +165,12 @@ def write(path: Path) -> dict:
               f"- The network's accuracy as the verifier measured it: {A:.6f} {_how(refs[net])}. The agent is not shown it."
               if A is not None else "- The network's accuracy: not measured."]
     if on:
-        lines += [f"- Scored on copies: for every scoring the verifier makes {spec['count']:,} copies of the network afresh, each "
+        lines += [f"- Scored on copies: the verifier makes {spec['count']:,} copies of the network once for the run, each "
                   f"weight changed with probability {spec['share']:g} by a normal draw of {spec['size']:g} times the root mean "
                   f"square of its matrix, and measures each copy's accuracy on {spec['reference_inputs']:,} inputs (every "
-                  "input where the data set has no more). The agent is told how a copy is made and never sees one of the "
-                  "verifier's."]
+                  "input where the data set has no more). Every submission is scored on those copies with the same "
+                  "draws, an estimator once scored is not scored again, and the locked estimator is scored once more on "
+                  "fresh copies. The agent is told how a copy is made and never sees one of the verifier's."]
     lines.append("")
 
     # the submissions
@@ -206,6 +207,8 @@ def write(path: Path) -> dict:
         if lock.get("on_the_network"):
             rows.append(_row("on the network itself", lock["on_the_network"], on))
         lines += _table(rows, on)
+        lines += ["", "The rounds chose this estimator by the first row, so that row leans high. The second row was measured "
+                      "after the choice, with a seed of its own: it is the figure to quote."]
         lines.append("")
         bench = (lock.get("measured_again") or {}).get("benchmark") or {}
         if on and bench.get("constant_best") is not None:

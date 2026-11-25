@@ -26,6 +26,7 @@ again (a resumed run) continues them, and its earlier submissions stay.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -180,11 +181,18 @@ TOOLS = {
             "Hand a saved estimator to the verifier. It runs the estimator many times on seeds of its own (and, when "
             "the run scores on copies of the network, on copies of its own) and returns the result: status scored or "
             "refused (with the reason), the reward, the mean squared error of the estimates, their mean and spread, "
-            "and the cost in forward passes (mean, least and most). Each call counts against the submission budget."),
+            "and the cost in forward passes (mean, least and most). Each call counts against the submission budget. "
+            "Every submission of the run is scored with the same seeds (and on the same copies), so two estimators' "
+            "scores differ by what the estimators compute and by nothing else. An estimator the run has already "
+            "scored, in this round or an earlier one and under any name, is not scored again: the call is refused "
+            "and counts against nothing."),
         "schema": {"type": "object", "properties": {
             "name": {"type": "string", "description": "the name the estimator was saved under"}}, "required": ["name"]},
     },
 }
+
+
+SCORING_SEED = "scoring_seed.json"  # in the run's folder: the seed of every scoring of the run's submissions
 
 
 def verifier_settings(cfg: dict) -> dict:
@@ -393,12 +401,17 @@ class Session:
             if not path.is_file() or path.is_symlink():
                 raise ToolError(f"no saved estimator named {name!r}; the saved estimators are {sorted(self.estimators())}")
             est = read_json(path)
+            before = self.scored_before(est)
+            if before:
+                raise ToolError(f"this estimator was already scored in this run ({before}). Every submission of a run is "
+                                "scored on the same copies and seeds, so it would get the same score again. The call "
+                                "used no submission")
             self._spend("submit_estimator")
             n = self.state["used"]["submit_estimator"]
             folder = self.path / "submissions" / f"{n:03d}"
             folder.mkdir(parents=True, exist_ok=True)
             write_json(folder / "estimator.json", est)
-            receipt = self.verifier().score(est, keep_runs=True)
+            receipt = self.verifier().score(est, keep_runs=True, seed=self.scoring_seed())
             runs = receipt.pop("runs_data", None)
             if runs is not None:
                 np.savez(folder / "runs.npz", **{k: np.asarray(v) for k, v in runs.items()})
@@ -410,6 +423,37 @@ class Session:
         except ToolError as exc:
             self._log("submit_estimator", args, {"error": str(exc)}, time.monotonic() - t0)
             raise
+
+    def scoring_seed(self) -> int:
+        """The seed of every scoring of this run's submissions: its copies of the network and the draws of each run.
+        Drawn once from the operating system, when the run's first submission arrives, and kept in the run's folder,
+        which the agent's code cannot read. With one seed for the whole run a draw of copies is nobody's luck: an
+        estimator handed in again would score the same, and two estimators differ by what they compute alone. The
+        run's lock is scored once more on copies of its own (loop.finish)."""
+        path = Path(self.state["run_path"]) / SCORING_SEED
+        try:
+            with open(path, "x") as f:
+                json.dump({"seed": int.from_bytes(os.urandom(8), "big"), "made": now()}, f)
+        except FileExistsError:
+            pass
+        return int(read_json(path)["seed"])
+
+    def scored_before(self, est: dict) -> str | None:
+        """Where this run has scored this very estimator before (any round, any name), in words; None if nowhere."""
+        try:
+            sha = lang.entry_hash(est)
+        except Exception:
+            return None  # not an estimator the verifier would score: its refusal says why
+        for rec in sorted(Path(self.state["run_path"]).glob("round_*/session/submissions/*/receipt.json")):
+            try:
+                r = read_json(rec)
+            except (OSError, ValueError):
+                continue
+            if r.get("entry_sha256") == sha:
+                k = int(rec.parts[-5].split("_")[1])
+                got = f"reward {r['reward']:.6e}" if r.get("status") == "scored" else f"refused: {r.get('reason')}"
+                return f"round {k}, submission {r.get('submission')}, as {r.get('name')!r}: {got}"
+        return None
 
     def receipts(self) -> list:
         """The receipts of this session's submissions, in order."""

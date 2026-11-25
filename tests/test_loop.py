@@ -44,8 +44,12 @@ def test_the_rounds_and_why_they_end(finished):
     assert r2["submissions"][0]["name"] == "sampling_128" and r2["submissions"][0]["reward"] > s32["reward"]
     # the constant 0.98, read off nothing but the agent's own sample, beats every sampler on this network
     assert r3["submissions"][0]["reward"] == pytest.approx(-((0.98 - A) ** 2)) and r3["improved"]
-    assert [s["status"] for s in r4["submissions"]] == ["refused", "scored"]   # the third was over the budget
-    assert "the estimate is nan" in r4["submissions"][0]["reason"] and r4["tools_used"] == {"run_python": 1, "submit_estimator": 2}
+    # round 4 hands in a faulty estimator and then two the run has scored before (r1s2, and the best under its
+    # carried name): those two are not scored again and spend nothing
+    assert [s["status"] for s in r4["submissions"]] == ["refused"]
+    assert "the estimate is nan" in r4["submissions"][0]["reason"] and r4["tools_used"] == {"run_python": 1, "submit_estimator": 1}
+    again = [e for e in read_jsonl(path / "round_004" / "session" / "tools.jsonl") if "already scored in this run" in str(e["outcome"].get("error"))]
+    assert [e["args"]["name"] for e in again] == ["r1s2", "best"] and "round 1, submission 2" in again[0]["outcome"]["error"]
     assert r1["notes"].startswith("## What the network does") and "Some working text" not in r1["notes"]
     assert r5["notes"] == "No notes in the asked-for form this time." and r5["submissions"] == []
     assert any("WARNING: the sandbox is in process mode" in line for line in lines)
@@ -139,7 +143,7 @@ def test_the_report(finished):
     assert "### Its closing notes, last round" in text and "\u2014" not in text  # no em dash
     assert "## What the agent ran" in text and "5 programs in all" in text and "The guard inside Python refused nothing." in text
     assert rep["exploration"]["reaching"] == []
-    assert rep["lock"]["carried_as"] == "r3s1" and len(rep["submissions"]) == 5
+    assert rep["lock"]["carried_as"] == "r3s1" and len(rep["submissions"]) == 4  # round 4's two repeats were not scored
     refs = read_json(path / "reference_scores.json")
     best = [r["name"] for r in refs["networks"]["rnn-b-s0"] if r["name"].startswith("plain sampling")]
     A = loop.cached_references(path)["rnn-b-s0"]["accuracy"]
@@ -263,7 +267,9 @@ def test_on_copies_the_number_read_off_the_network_loses_and_a_sampler_is_locked
     assert lock["measured_again"]["parts"]["copies"] == 32 and lock["measured_again"]["seed"] != lock["seed"]
     alone = lock["on_the_network"]
     assert alone["status"] == "scored" and "copies" not in alone["parts"] and alone["runs"] == 256
-    assert any("every scoring on 32 copies of the network drawn afresh" in line for line in lines)
+    assert any("every submission scored on the run's own 32 copies of the network" in line for line in lines)
+    seeds = {s["seed"] for rd in (r1, r2) for s in rd["submissions"]}
+    assert seeds == {read_json(path / "scoring_seed.json")["seed"]} and lock["measured_again"]["seed"] not in seeds
     assert not any("WARNING: the reward" in line for line in lines)  # the warning of a run on the network itself
     assert any("the locked estimator on the network itself: reward" in line for line in lines)
     assert loop.finish(path, out=lambda *_: None) == lock  # from the records alone: nothing is measured again
@@ -273,7 +279,10 @@ def test_on_copies_the_agent_is_told_how_copies_are_made_and_nothing_of_their_ac
     path, _ = on_copies
     first = (path / "round_001" / "prompt.md").read_text()
     for said in ("The estimator is not scored on the network as you hold it but on copies of it",
-                 "it makes\n32 copies of the network, each with a few of its weights changed at random",
+                 "It scores it on\n32 copies of the network, each with a few of its weights changed at random",
+                 "The verifier draws its copies once for this run, from a seed it keeps to itself",
+                 "an estimator that has been scored is not scored again (the call is refused and costs no\nsubmission)",
+                 "the best estimator is scored once more on fresh copies",
                  "Every weight is changed with probability 0.125, each on its own",
                  "standard deviation is 0.0398\ntimes the root mean square of the entries of its weight matrix",
                  "8,192 inputs it draws from the data set", "estimator 8 times on the copy", "That is 256 runs in all.",
@@ -309,8 +318,9 @@ def test_on_copies_the_heldout_networks_are_scored_as_they_are(on_copies):
 def test_on_copies_the_report(on_copies):
     path, _ = on_copies
     text = (path / "report.md").read_text()
-    for said in ("- Scored on copies: for every scoring the verifier makes 32 copies of the network afresh, each weight changed "
+    for said in ("- Scored on copies: the verifier makes 32 copies of the network once for the run, each weight changed "
                  "with probability 0.125 by a normal draw of 0.0398 times the root mean square of its matrix",
+                 "an estimator once scored is not scored again", "it is the figure to quote.",
                  "| follows the copies |", "| scored again, fresh seed and fresh copies |", "| on the network itself |",
                  "What a number written into an estimator would score on the copies of the second scoring:",
                  "| the network's own accuracy, written in as a constant on rnn-b-s0 (copies) |",

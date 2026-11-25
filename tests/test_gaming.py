@@ -11,8 +11,10 @@ import math
 import numpy as np
 import pytest
 
-from arcagent import lang, measure
+from arcagent import lang, measure, run_config
 from arcagent.networks import load_model
+from arcagent.session import Session, ToolError
+from arcagent.util import read_json, write_json
 from arcagent.verifier import Verifier
 
 CFG = {"verifier": {"runs": 256, "reference_inputs": 2**16}, "reward": {"name": "r_lambda", "lam": 1e-6}}
@@ -191,3 +193,55 @@ def test_a_table_of_what_each_weight_does_loses_to_plain_sampling(model, ver, cv
         assert 0.7 < t["parts"]["tracking"] < 0.97  # it is not nothing
         assert t["reward"] < 1.5 * s["reward"] < 0  # and it loses: at least one and a half times sampling's loss
         assert t["reward"] > t["benchmark"]["constant_best"]  # though it beats every number written in
+
+
+def a_round(tmp_path, k, run="run"):
+    """Round k's session of a run that scores on copies, with three submissions to spend."""
+    cfg = run_config.load("config/pilot/rnn-b-smoke.yaml", {"runs_dir": str(tmp_path), "sandbox": "process",
+                                                           "session": {"python_calls": 1, "submissions": 3},
+                                                           "verifier": {"runs": 128, "reference_inputs": 2**16,
+                                                                        "copies": {"count": 6, "runs": 4, "reference_inputs": 2048}}})
+    return Session.create(tmp_path / run / f"round_{k:03d}" / "session", cfg, "rnn-b-s0", tmp_path / run)
+
+
+def test_a_second_scoring_of_the_same_estimator_is_not_to_be_had(tmp_path, model):
+    """Found in the first attention pilot: in its last round the agent handed in one estimator three times, said it
+    was looking for a better draw of copies, and the luckiest of the scorings became the lock. Now every submission
+    of a run is scored on the same copies with the same seeds, drawn once for the run and kept where the agent's
+    code cannot read, so a draw is nobody's luck; an estimator the run has scored is not scored again, under any
+    name, in any round, and the call spends no submission."""
+    weights = model.load_weights("rnn-b-s0")
+    g = model.graph(weights)
+    follows = 0.5 + 0.001 * g.weight("recurrent").sum()
+    plain, padded = g.entry(follows), g.entry(follows + 0.0)       # the same number, one operation more
+    s1 = a_round(tmp_path, 1)
+    for name, est in (("first", plain), ("again", plain), ("padded", padded)):
+        write_json(s1.saved_dir / f"{name}.json", est)
+    s1.submit_estimator("first")
+    for name in ("first", "again"):
+        with pytest.raises(ToolError, match="already scored in this run"):
+            s1.submit_estimator(name)
+    s1.submit_estimator("padded")
+    assert s1.state["used"]["submit_estimator"] == 2 and len(s1.receipts()) == 2
+    a, b = s1.receipts()
+    # the same copies and the same error to the last digit, and the cost of one operation: nothing to hope for
+    assert a["seed"] == b["seed"] and a["copies"]["seeds"] == b["copies"]["seeds"] and a["copies"]["accuracy"] == b["copies"]["accuracy"]
+    assert a["parts"]["mse"] == b["parts"]["mse"] and b["reward"] < a["reward"]
+    assert math.isclose(a["reward"] - b["reward"], 1e-6 / Verifier(model, "rnn-b-s0", CFG).F, rel_tol=1e-6)
+    # a later round of the run: the earlier rounds' estimators are known to it, and its copies are the same
+    s2 = a_round(tmp_path, 2)
+    write_json(s2.saved_dir / "r1s1.json", plain)
+    write_json(s2.saved_dir / "sampling.json", model.monte_carlo(weights, 16))
+    with pytest.raises(ToolError, match="round 1, submission 1"):
+        s2.submit_estimator("r1s1")
+    s2.submit_estimator("sampling")
+    (c,) = s2.receipts()
+    assert s2.state["used"]["submit_estimator"] == 1 and c["seed"] == a["seed"] and c["copies"]["accuracy"] == a["copies"]["accuracy"]
+    # an estimator that draws gets the same draws too: handed in under another form it would score the same
+    assert c["parts"]["mse"] == Verifier(model, "rnn-b-s0", s2.state).score(model.monte_carlo(weights, 16), seed=c["seed"])["parts"]["mse"]
+    # another run has copies of its own, and the run's seed is not in the session's folder
+    s3 = a_round(tmp_path, 1, run="another")
+    write_json(s3.saved_dir / "first.json", plain)
+    s3.submit_estimator("first")
+    assert s3.receipts()[0]["seed"] != a["seed"] and not set(s3.receipts()[0]["copies"]["seeds"]) & set(a["copies"]["seeds"])
+    assert str(a["seed"]) not in "".join(q.read_text() for q in (tmp_path / "run" / "round_001" / "session").glob("*.json"))

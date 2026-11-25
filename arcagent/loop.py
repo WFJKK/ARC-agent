@@ -279,9 +279,10 @@ def start(cfg: dict, fake_scripts=None, out=print) -> Path:
         "reference": {k: ref[k] for k in ("n", "seed", "chunk", "standard_error")},
     })
     c = verifier.copies
-    how = (f"every scoring on {c['count']:,} copies of the network drawn afresh (each weight changed with probability "
-           f"{c['share']:g}, by {c['size']:g} times its matrix's RMS), {c['runs']:,} runs on each" if c
-           else f"{int(cfg['verifier']['runs']):,} runs per scoring")
+    how = (f"every submission scored on the run's own {c['count']:,} copies of the network (each weight changed with "
+           f"probability {c['share']:g}, by {c['size']:g} times its matrix's RMS; the lock once more on fresh ones), "
+           f"{c['runs']:,} runs on each" if c
+           else f"{int(cfg['verifier']['runs']):,} runs per scoring, the same seeds for every submission")
     log(f"run {cfg['run_id']} at {path}: {cfg['model']} / {cfg['network']}, sandbox {sb.mode}, backend {cfg['backend']}; "
         f"a forward pass is {verifier.F:,} operations; {how}; {len(heldout_networks(cfg))} held-out networks")
     if cfg["backend"] in ("claude_code", "openai_api") and cfg["auth"] == "api_key":
@@ -451,8 +452,8 @@ def finish(path: Path, out=print) -> dict:
         if old_lock.get("entry_sha256") == lock["entry_sha256"] and old_lock.get("measured_again"):
             lock["measured_again"] = old_lock["measured_again"]
         else:
-            # The lock is the best of several scorings, each with its own seed, so its recorded reward leans high.
-            # One more scoring with a fresh seed is a fair measurement of it.
+            # The lock is the best of the run's submissions on the run's own seed (its copies, its draws): chosen
+            # there, its recorded reward leans high. One more scoring with a fresh seed is a fair measurement of it.
             again = verifier_for(path, cfg, model, cfg["network"], log).score(est)
             if again["entry_sha256"] != lock["entry_sha256"]:
                 raise RuntimeError("the second scoring did not score the locked estimator")
