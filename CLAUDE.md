@@ -19,12 +19,6 @@ built on Mech-Interp-Agent-level1, and keeps its rules.
   from the variable `api_key_env` names (`CPL_ANTHROPIC_KEY`), reaches the CLI only through its `apiKeyHelper`
   under `--bare`, is never written to a file or a log, and the run stops at its budget. Tests use stand-ins for the
   CLI and the API.
-- Nothing model-specific goes in `arcagent/`: an architecture lives only in its `models/<name>/model.py`, a task in
-  its `task.py`, and numbers live only in config files.
-- Run small tests before large runs (the smoke configs first), and keep logs append-only so any run can resume.
-- A way to raise the score without estimating better or computing less gets a test in `tests/test_gaming.py`
-  before it is fixed.
-- Ask the user before deleting files, before changing the estimator format (`FORMAT` in `arcagent/lang.py`) and
 - The same for OpenAI (`docs/OPENAI.md`): never read or set `OPENAI_API_KEY` or `CODEX_API_KEY`. The
   `openai_api` backend takes its key from the variable `api_key_env` names (`CPL_OPENAI_KEY`), sends it
   in the request's Authorization header only, and stops at the run's budget, which it counts from the
@@ -33,6 +27,12 @@ built on Mech-Interp-Agent-level1, and keeps its rules.
   nothing that reads a file or the web: the backend checks that against a stand-in before a run and in
   every session's events; a change to its switches keeps `tests/test_backend_codex.py` passing with
   the CLI installed.
+- Nothing model-specific goes in `arcagent/`: an architecture lives only in its `models/<name>/model.py`, a task in
+  its `task.py`, and numbers live only in config files.
+- Run small tests before large runs (the smoke configs first), and keep logs append-only so any run can resume.
+- A way to raise the score without estimating better or computing less gets a test in `tests/test_gaming.py`
+  before it is fixed.
+- Ask the user before deleting files, before changing the estimator format (`FORMAT` in `arcagent/lang.py`) and
   before changing a price (`PRICES`): receipts made under one price list cannot be compared with receipts made
   under another.
 - The reward is meant to be changed, the measuring is not: a new reward is a function in `arcagent/rewards.py`
