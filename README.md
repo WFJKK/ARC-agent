@@ -368,8 +368,10 @@ Start small. The smoke runs take one short round each:
     python -m arcagent.loop run --config config/pilot/rnn-g.yaml          # the pilot: 5 rounds, 8 held-out networks
     python -m arcagent.loop run --config config/pilot/att-c-smoke.yaml    # any other model: its smoke test first
 
-Without `--auth api_key` a run uses your own Claude Code login (`claude` must be installed and logged in). Every
-run can be tried first with scripted rounds and no model at all: `--fake tests/fake_run`.
+Without `--auth api_key` a run uses your own Claude Code login (`claude` must be installed and logged in). An
+OpenAI model can take the agent's place, through the Codex CLI under a ChatGPT login or through OpenAI's API on a
+key: see "With an OpenAI model" below. Every run can be tried first with scripted rounds and no model at all:
+`--fake tests/fake_run`.
 
 ### Stopping and resuming
 
@@ -388,6 +390,25 @@ A usage limit is waited out; a login problem stops the run cleanly, and `resume`
 `budget.run_usd` (60 dollars) and `budget.round_usd` (20): `--budget-usd` changes the run's. The key is checked
 against the API before the first round, at no cost, and never reaches a file or a log. Level 1's rnn-g pilot cost
 about 27 dollars for 5 rounds on `claude-fable-5-1`; this task is of the same size.
+
+### With an OpenAI model
+
+Two more backends, taken from Mech-Interp-Agent-level1 and described in [`docs/OPENAI.md`](docs/OPENAI.md). The
+prompt, the tools, the budgets of a session and everything measured are the same as under Claude Code.
+
+    python -m arcagent.loop run --config config/pilot/lin-a-codex-smoke.yaml     # the Codex CLI, under a ChatGPT login
+    python -m arcagent.loop run --config config/pilot/lin-a-openai-smoke.yaml    # OpenAI's API, the key in CPL_OPENAI_KEY
+    python -m arcagent.loop run --config config/pilot/att-a.yaml --backend codex --agent-model gpt-6.2-astra --run-id pilot-att-a-codex
+
+- `backend: codex` runs OpenAI's Codex CLI (`npm install -g @openai/codex`, then `codex login`) once per round, under
+  your ChatGPT login only. Codex is a coding agent, so everything of its own that reads a file or the web is switched
+  off, and before the first round the CLI is run against a stand-in on this machine to check that: a run starts only
+  if the model would be given the session's two tools and nothing that reads a file or the web.
+- `backend: openai_api` talks to OpenAI's API itself, billed to the key in `CPL_OPENAI_KEY` (never `OPENAI_API_KEY`)
+  within the run's budget, which is counted here from the tokens the API reports at `openai.prices` in
+  `config/defaults.yaml`. Check those prices against OpenAI's pricing page before a run.
+
+Any pilot config runs under another backend with `--backend`, `--agent-model` and a `--run-id` of its own.
 
 ### The sandbox
 
@@ -434,7 +455,7 @@ of the others). Every run starts by trying real escapes in the chosen mode. `doc
 | `arcagent/prompt.py`, `prompts/round_v1.md`, `agent_docs/ESTIMATOR.md` | everything the agent is told |
 | `arcagent/hygiene.py` | the check that nothing withheld reaches the agent |
 | `arcagent/sandbox.py`, `runner.py`, `harness.py` | where the agent's code runs (from level 1) |
-| `arcagent/backends/` | the Claude Code CLI and the scripted stand-in (from level 1) |
+| `arcagent/backends/` | who answers a round: the Claude Code CLI, OpenAI's Codex CLI and OpenAI's API (`docs/OPENAI.md`), and the scripted stand-in (from level 1) |
 | `arcagent/budget.py`, `run_config.py`, `mcp_server.py`, `util.py` | API budget, configs, the tool server, helpers |
 | `models/rnn-g/` | the 432-weight challenge network and its held-out networks |
 | `models/rnn-b/` | a 32-weight network of the same family, for smoke runs and tests |

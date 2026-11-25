@@ -25,6 +25,14 @@ built on Mech-Interp-Agent-level1, and keeps its rules.
 - A way to raise the score without estimating better or computing less gets a test in `tests/test_gaming.py`
   before it is fixed.
 - Ask the user before deleting files, before changing the estimator format (`FORMAT` in `arcagent/lang.py`) and
+- The same for OpenAI (`docs/OPENAI.md`): never read or set `OPENAI_API_KEY` or `CODEX_API_KEY`. The
+  `openai_api` backend takes its key from the variable `api_key_env` names (`CPL_OPENAI_KEY`), sends it
+  in the request's Authorization header only, and stops at the run's budget, which it counts from the
+  API's token counts at the prices in the config. The `codex` backend runs under the user's ChatGPT
+  login only, with the key variables removed from the CLI's environment. A Codex session must have
+  nothing that reads a file or the web: the backend checks that against a stand-in before a run and in
+  every session's events; a change to its switches keeps `tests/test_backend_codex.py` passing with
+  the CLI installed.
   before changing a price (`PRICES`): receipts made under one price list cannot be compared with receipts made
   under another.
 - The reward is meant to be changed, the measuring is not: a new reward is a function in `arcagent/rewards.py`

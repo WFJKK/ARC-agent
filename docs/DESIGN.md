@@ -205,3 +205,9 @@ Numbers live in the config files and never in code. Nothing specific to one mode
 - Per-context accuracies (the accuracy given part of the input), which make a constant much harder to guess.
 - A count of the forward passes the agent's own code makes while exploring. Its programs are kept, so the count can
   be made afterwards.
+`backend: codex` and `backend: openai_api` put an OpenAI model in the agent's place: the first runs
+OpenAI's Codex CLI under a ChatGPT login, with everything of its own that reads a file or the web
+switched off and checked to be off before a model is asked; the second talks to OpenAI's API itself,
+billed to a key within the run's budget, which it counts from the tokens the API reports. Both are
+described in `docs/OPENAI.md`.
+
