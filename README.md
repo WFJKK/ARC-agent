@@ -396,7 +396,17 @@ A usage limit is waited out; a login problem stops the run cleanly, and `resume`
 ### On an API key
 
 `--auth api_key` bills the key in `CPL_ANTHROPIC_KEY` (never `ANTHROPIC_API_KEY`, which the backend removes), within
-`budget.run_usd` (60 dollars) and `budget.round_usd` (20): `--budget-usd` changes the run's. The key is checked
+`budget.run_usd` (60 dollars) and `budget.round_usd` (20): `--budget-usd` changes the run's.
+
+A run started under your login can go on billed to a key, for instance when the login's usage runs out in the
+middle of a round. Stop it (Ctrl-C in its terminal; only one process drives a run at a time), then:
+
+    export CPL_ANTHROPIC_KEY=...    # in this terminal only
+    python -m arcagent.loop resume --run ~/arc-agent-runs/pilot-rnn-g --auth api_key
+
+The round that was under way starts its next try billed to the key, with what it saved and submitted. The model,
+the prompt and the scoring stay as they were, `run.json` is not touched, and the change is kept in `changes.jsonl`
+with the round it was made in, and said in the log and the report. The key is checked
 against the API before the first round, at no cost, and never reaches a file or a log. Level 1's rnn-g pilot cost
 about 27 dollars for 5 rounds on `claude-fable-5-1`; this task is of the same size.
 

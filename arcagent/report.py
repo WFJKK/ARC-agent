@@ -164,6 +164,16 @@ def write(path: Path) -> dict:
               f"forward passes).",
               f"- The network's accuracy as the verifier measured it: {A:.6f} {_how(refs[net])}. The agent is not shown it."
               if A is not None else "- The network's accuracy: not measured."]
+    who = lambda c: (f"billed to the API key in {c.get('api_key_env')}" if c.get("auth") == "api_key"
+                     else "under the login of the agent's CLI")
+    paid = f"from round 1 {who(cfg)}"
+    for change in read_jsonl(path / "changes.jsonl"):
+        c = {**cfg, **change["set"]}
+        paid += f"; from round {change['round']} {who(c)} (changed on resume, {change['at'][:16].replace('T', ' ')})"
+        cfg = c
+    if (path / "changes.jsonl").is_file():
+        lines.append(f"- Who paid: {paid}. The model, the prompt and the scoring were the same throughout.")
+    cfg = d["cfg"]
     if on:
         lines += [f"- Scored on copies: the verifier makes {spec['count']:,} copies of the network once for the run, each "
                   f"weight changed with probability {spec['share']:g} by a normal draw of {spec['size']:g} times the root mean "

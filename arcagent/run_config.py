@@ -53,6 +53,11 @@ def load(path, overrides: dict | None = None) -> dict:
     unknown = sorted(set(cfg) - set(read_yaml(DEFAULTS)) - {"model", "network", "fake_scripts"})
     if unknown:
         raise ConfigError(f"unknown keys in the run config: {unknown}")
+    return check(cfg)
+
+
+def check(cfg: dict) -> dict:
+    """What a run config must satisfy, after every merge: a new run's, and a run's whose billing `resume` changes."""
     missing = [k for k in REQUIRED if not cfg.get(k)]
     if missing:
         raise ConfigError(f"the run config needs {missing}")

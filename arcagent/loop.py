@@ -3,7 +3,7 @@
     python -m arcagent.loop run --config config/pilot/rnn-g.yaml [--run-id X] [--sandbox hardened] [--fake DIR]
                                 [--auth api_key] [--budget-usd 60]
                               [--backend codex|openai_api --agent-model M --run-id ID]
-    python -m arcagent.loop resume --run <run folder> [--budget-usd 80]
+    python -m arcagent.loop resume --run <run folder> [--budget-usd 80] [--auth api_key [--api-key-env CPL_ANTHROPIC_KEY]]
     python -m arcagent.loop finish --run <run folder>    the lock, the held-out check and the report again, from the records
     python -m arcagent.loop rescore --run <run folder> --lam 1e-7    the records under another reward
                                 (--param KEY=VALUE for any other parameter of a reward)
@@ -11,6 +11,8 @@
 A run folder (outside the repository, <runs_dir>/<run_id>):
 
     run.json              the config, the commit, the hash of the trusted files, the sandbox and its probe
+    changes.jsonl         what `resume` changed in the config since (who pays: --auth), from which round, appended
+    running.json          while a process drives the run: which one (one process at a time)
     log.jsonl             what happened, appended
     references.jsonl      the verifier's measurement of each network's accuracy, appended once per network
     spend.jsonl           a run billed to an API key: every try's cap and cost, appended (budget.py)
@@ -39,8 +41,11 @@ out is how an estimator written on one network does on networks it was not writt
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import json
 import os
+import socket
 import sys
 import tempfile
 from pathlib import Path
@@ -56,6 +61,8 @@ TRUSTED_GLOBS = ("arcagent/**/*.py", "prompts/*.md", "agent_docs/*.md")
 NOTES_HEADING = "## What the network does"
 MAX_NOTES = 6000
 HELDOUT_SCORES = "heldout_scores.jsonl"
+CHANGES = "changes.jsonl"
+RUNNING = "running.json"
 
 
 def trusted_hash(model) -> str:
@@ -83,6 +90,54 @@ class Log:
 
 
 # what the records say ---------------------------------------------------------------------------
+def run_cfg(path: Path) -> dict:
+    """The run's config: run.json's, with what `resume` changed since (changes.jsonl), in order. run.json itself is
+    never rewritten."""
+    cfg = read_json(Path(path) / "run.json")["config"]
+    for change in read_jsonl(Path(path) / CHANGES):
+        cfg = run_config.merge(cfg, change["set"])
+    return cfg
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # someone else's process: alive
+    return True
+
+
+@contextlib.contextmanager
+def driving(path: Path):
+    """One process at a time drives a run. Two would run two agents in one round's session and, billed to a key,
+    pay twice. The file names the process; one that no longer runs (killed, or the machine restarted) is taken over."""
+    f, me = Path(path) / RUNNING, {"pid": os.getpid(), "host": socket.gethostname(), "since": now()}
+    try:
+        fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            other = read_json(f)
+        except (OSError, ValueError):
+            other = {}
+        if other.get("host") != me["host"] or _alive(int(other.get("pid") or 0)):
+            raise RuntimeError(f"another process is driving this run (process {other.get('pid')} on {other.get('host')}, since "
+                               f"{other.get('since')}): stop it first, with Ctrl-C in its terminal. If none is, remove {f}")
+        f.unlink(missing_ok=True)
+        fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    with os.fdopen(fd, "w") as h:
+        json.dump(me, h)
+    try:
+        yield
+    finally:
+        try:
+            if read_json(f).get("pid") == me["pid"]:
+                f.unlink()
+        except (OSError, ValueError):
+            pass
+
+
 def completed(path: Path) -> list:
     """The rounds that are done, in order: round.json of round 1, 2, ... until one is missing."""
     out = []
@@ -301,30 +356,51 @@ def start(cfg: dict, fake_scripts=None, out=print) -> Path:
     return path
 
 
-def drive(path: Path, fake_scripts=None, out=print, accept_changes: bool = False, budget_usd: float | None = None) -> str:
+def drive(path: Path, fake_scripts=None, out=print, accept_changes: bool = False, budget_usd: float | None = None,
+          auth: str | None = None, api_key_env: str | None = None) -> str:
     """Run the rounds that are left, then finish. Returns how it ended: finished, or stopped (resume later).
-    budget_usd: a new budget for a run billed to an API key, kept in its spend log."""
-    path = Path(path)
+    budget_usd: a new budget for a run billed to an API key, kept in its spend log.
+    auth, api_key_env: who pays from the next round on (a round under way starts its next try under it). The model,
+    the prompt and the scoring stay as they are; the change is kept in changes.jsonl and said in the log."""
+    with driving(Path(path)):
+        return _drive(Path(path), fake_scripts, out, accept_changes, budget_usd, auth, api_key_env)
+
+
+def _drive(path: Path, fake_scripts, out, accept_changes: bool, budget_usd, auth, api_key_env) -> str:
     run = read_json(path / "run.json")
-    cfg = run["config"]
+    cfg = run_cfg(path)
     log = Log(path, out)
+    change = {k: v for k, v in (("auth", auth), ("api_key_env", api_key_env)) if v is not None and v != cfg.get(k)}
+    if change:
+        cfg = run_config.check(run_config.merge(cfg, change))
     if budget_usd is not None:
         if cfg.get("auth") != "api_key":
             raise RuntimeError("this run is not billed to an API key, so it has no budget to change")
         errors = budget.check({**cfg["budget"], "run_usd": budget_usd})
         if errors:
             raise RuntimeError("; ".join(errors))
-        before = budget.state(path, cfg["budget"])
-        budget.set_run_budget(path, budget_usd)
-        log(f"the run's API budget is now ${budget_usd:.2f} (was ${before['run_usd']:.2f}; ${before['spent']:.2f} counted so far)",
-            budget_usd=budget_usd)
     model = load_model(cfg["model"])
     if trusted_hash(model) != run["trusted_hash"]:
         if not accept_changes:
             raise RuntimeError("the code, the prompt, the guide or the model folder changed since this run began; "
                                "resume with --accept-changes to go on all the same (the log will say so)")
         log("the trusted files changed since the run began; going on as asked", trusted_hash=trusted_hash(model))
-    backend = make(cfg, log=log, fake_scripts=fake_scripts)
+    backend = make(cfg, log=log, fake_scripts=fake_scripts)  # a missing or refused key stops here, before anything is kept
+    if change:
+        k = len(completed(path)) + 1
+        append_jsonl(path / CHANGES, {"at": now(), "round": k, "set": change})
+        if cfg["auth"] == "api_key":
+            st = budget.state(path, cfg["budget"])
+            log(f"from round {k} on, the run is billed to the API key in {cfg['api_key_env']}: at most "
+                f"${budget.left(st):.2f} more for the run and ${float(cfg['budget']['round_usd']):.2f} a round, by "
+                "Claude Code's count (spend.jsonl). The model, the prompt and the scoring are as before", changed=change, round=k)
+        else:
+            log(f"from round {k} on, the run is under your login: no API key is used", changed=change, round=k)
+    if budget_usd is not None:
+        before = budget.state(path, cfg["budget"])
+        budget.set_run_budget(path, budget_usd)
+        log(f"the run's API budget is now ${budget_usd:.2f} (was ${before['run_usd']:.2f}; ${before['spent']:.2f} counted so far)",
+            budget_usd=budget_usd)
     forbidden = forbidden_strings(cfg, model)
     while True:
         done = completed(path)
@@ -429,7 +505,7 @@ def finish(path: Path, out=print) -> dict:
     from . import report
 
     path = Path(path)
-    cfg = read_json(path / "run.json")["config"]
+    cfg = run_cfg(path)
     log = Log(path, out)
     model = load_model(cfg["model"])
     done = completed(path)
@@ -559,6 +635,9 @@ def main(argv=None) -> int:
     s.add_argument("--fake")
     s.add_argument("--accept-changes", action="store_true")
     s.add_argument("--budget-usd", type=float, help="api_key: a new budget for the whole run, in dollars")
+    s.add_argument("--auth", choices=("login", "api_key"), help="who pays from the next round on: login, your CLI's login; "
+                   "api_key, the key in --api-key-env (default CPL_ANTHROPIC_KEY), within the run's budget. Kept in changes.jsonl")
+    s.add_argument("--api-key-env", help="api_key: the variable that holds the key (default: the run's)")
     f = sub.add_parser("finish")
     f.add_argument("--run", required=True)
     c = sub.add_parser("rescore")
@@ -584,7 +663,7 @@ def main(argv=None) -> int:
             return 0
         if args.cmd == "resume":
             return 0 if drive(Path(args.run), fake_scripts=args.fake, accept_changes=args.accept_changes,
-                              budget_usd=args.budget_usd) == "finished" else 2
+                              budget_usd=args.budget_usd, auth=args.auth, api_key_env=args.api_key_env) == "finished" else 2
         if args.cmd == "finish":
             finish(Path(args.run))
             return 0

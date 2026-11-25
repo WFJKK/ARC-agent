@@ -1,5 +1,6 @@
 """The whole run with scripted rounds: prompts, sessions, records, stopping, resume, lock, held-out check, report."""
 
+import json
 import math
 from pathlib import Path
 
@@ -177,6 +178,63 @@ def test_a_run_stopped_by_a_usage_limit_resumes_where_it_was(tmp_path):
     assert read_json(path / "lock.json")["name"] == "sampling_32"
     with pytest.raises(RuntimeError, match="is a run already"):
         loop.start(cfg, fake_scripts=HERE / "fake_resume")
+
+
+def test_a_run_under_a_login_goes_on_billed_to_an_api_key(tmp_path, monkeypatch):
+    """The first rnn-b and rnn-g pilots ran out of the login's usage in the middle of a round. `resume --auth api_key`
+    bills the rest to a key: the model, the prompt and the scoring stay as they were, run.json is not touched, the
+    change is kept in changes.jsonl from the round it was made in and said in the log and the report, and a later
+    resume keeps it. A change that cannot be made (a reserved variable, a key the backend refuses) keeps nothing."""
+    from arcagent.backends import BackendError
+
+    cfg = config(tmp_path, run_id="to-a-key", rounds_max=1)
+    path = run_config.run_path(cfg)
+    loop.start(cfg, fake_scripts=HERE / "fake_resume", out=lambda *_: None)  # stopped by a usage limit in round 1
+    before = (path / "run.json").read_bytes()
+    with pytest.raises(RuntimeError, match="not billed to an API key"):
+        loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None, budget_usd=30)
+    with pytest.raises(run_config.ConfigError, match="other than ANTHROPIC_API_KEY"):
+        loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None, auth="api_key", api_key_env="ANTHROPIC_API_KEY")
+    real = loop.make
+    refuse = lambda c, **k: (_ for _ in ()).throw(BackendError("the key was refused")) if c["auth"] == "api_key" else real(c, **k)
+    monkeypatch.setattr(loop, "make", refuse)
+    with pytest.raises(BackendError, match="refused"):
+        loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None, auth="api_key")
+    assert not (path / "changes.jsonl").exists() and not (path / "spend.jsonl").exists() and not (path / "running.json").exists()
+    monkeypatch.setattr(loop, "make", real)
+    lines = []
+    assert loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lines.append, auth="api_key", budget_usd=30) == "finished"
+    assert (path / "run.json").read_bytes() == before and not (path / "running.json").exists()
+    (change,) = read_jsonl(path / "changes.jsonl")
+    assert change["round"] == 1 and change["set"] == {"auth": "api_key"}
+    assert loop.run_cfg(path)["auth"] == "api_key" and read_json(path / "run.json")["config"]["auth"] == "login"
+    assert any(line.startswith("from round 1 on, the run is billed to the API key in CPL_ANTHROPIC_KEY: at most $60.00 more")
+               for line in lines)
+    assert [e["run_usd"] for e in read_jsonl(path / "spend.jsonl") if e["event"] == "budget"] == [30.0]
+    (rd,) = loop.completed(path)
+    assert [s["name"] for s in rd["submissions"]] == ["sampling_32", "constant_09"]  # the round went on where it was
+    assert "- Who paid: from round 1 under the login of the agent's CLI; from round 1 billed to the API key in CPL_ANTHROPIC_KEY" \
+        in (path / "report.md").read_text()
+
+
+def test_one_process_at_a_time_drives_a_run(tmp_path):
+    import os
+    import socket
+    import subprocess
+
+    cfg = config(tmp_path, run_id="one-at-a-time", rounds_max=1)
+    path = run_config.run_path(cfg)
+    loop.start(cfg, fake_scripts=HERE / "fake_resume", out=lambda *_: None)
+    lock = path / "running.json"
+    lock.write_text(json.dumps({"pid": os.getpid(), "host": socket.gethostname(), "since": "now"}))  # this process: alive
+    with pytest.raises(RuntimeError, match="another process is driving this run"):
+        loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None)
+    assert not (path / "round_001" / "round.json").exists()
+    gone = subprocess.Popen(["true"])
+    gone.wait()
+    lock.write_text(json.dumps({"pid": gone.pid, "host": socket.gethostname(), "since": "earlier"}))  # one that has ended
+    assert loop.drive(path, fake_scripts=HERE / "fake_resume_after", out=lambda *_: None) == "finished"
+    assert not lock.exists()
 
 
 def test_a_changed_tree_is_refused_on_resume(tmp_path, monkeypatch):
@@ -358,7 +416,8 @@ def test_the_command_line_starts_resumes_and_finishes_a_run(tmp_path):
     cfg = read_json(path / "run.json")["config"]
     assert (cfg["backend"], cfg["agent_model"], cfg["effort"], cfg["sandbox"]) == ("fake", "some-model", "low", "process")
     assert read_json(path / "lock.json")["locked"] and (path / "report.md").is_file()
-    assert loop.main(["resume", "--run", str(path), "--fake", "tests/fake_copies"]) == 0
+    assert loop.main(["resume", "--run", str(path), "--fake", "tests/fake_copies", "--auth", "api_key", "--api-key-env", "CPL_SOME_KEY"]) == 0
+    assert loop.run_cfg(path)["auth"] == "api_key" and loop.run_cfg(path)["api_key_env"] == "CPL_SOME_KEY"
     assert loop.main(["finish", "--run", str(path)]) == 0
     with pytest.raises(SystemExit):
         loop.main(["run", "--config", "config/pilot/rnn-b-smoke.yaml", "--backend", "no-such-backend"])
