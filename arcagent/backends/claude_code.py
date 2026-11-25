@@ -86,6 +86,7 @@ API_URL = "https://api.anthropic.com"
 NO_MODEL_FALLBACK = {"CLAUDE_CODE_NO_MODEL_FALLBACK": "1"}
 SWAP_EVENTS = ("model_fallback", "model_refusal_fallback", "model_consent_fallback")
 REFUSAL_EVENT = "model_refusal_no_fallback"
+OPENAI_KEY_PREFIXES = ("sk-proj-", "sk-svcacct-", "sk-admin-")  # how OpenAI's keys begin; never sent to Anthropic
 LIMIT_WORDS = ("usage limit", "rate limit", "rate_limit", "overloaded", "too many requests", "capacity", "529", "429")
 LOGIN_WORDS = ("not logged in", "login", "authenticat", "unauthorized", "invalid api key", "401", "403")
 # An API account that cannot pay for more: no credit left, or its spend limit reached. Waiting does not help.
@@ -266,11 +267,17 @@ class ClaudeCodeBackend:
             env.pop(var, None)  # never a key that happens to be in the environment
         self.workspace = None
         if self.auth == "api_key":
+            if any(w in self.key_var.upper() for w in ("OPENAI", "CODEX")):
+                raise BackendError(f"api_key_env is {self.key_var}, which reads like an OpenAI key's variable: a claude_code run "
+                                   "sends its key to Anthropic, so name the variable that holds the Anthropic key (CPL_ANTHROPIC_KEY)")
             if not self.key_var or not env.get(self.key_var):
                 raise BackendError(f"auth is api_key, but {self.key_var or 'api_key_env'} is not set: put your API key in it first")
             if not env[self.key_var].isprintable() or any(c.isspace() for c in env[self.key_var]):
                 raise BackendError(f"the value of {self.key_var} has spaces or line breaks, which an API key does not have "
                                    "(a line ending from the file it came from?)")
+            if env[self.key_var].startswith(OPENAI_KEY_PREFIXES):
+                raise BackendError(f"the value of {self.key_var} starts like an OpenAI key, and a claude_code run sends its key "
+                                   "to Anthropic: put the Anthropic key there (it was not sent)")
             errors = budget.check(cfg.get("budget"))
             if errors:
                 raise BackendError("; ".join(errors))

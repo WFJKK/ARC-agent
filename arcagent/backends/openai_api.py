@@ -158,6 +158,9 @@ class OpenAIBackend:
         if not self.key.isprintable() or any(c.isspace() for c in self.key):
             raise BackendError(f"the value of {self.key_var} has spaces or line breaks, which an API key does not have "
                                "(a line ending from the file it came from?)")
+        if self.key.startswith("sk-ant-"):
+            raise BackendError(f"the value of {self.key_var} starts like an Anthropic key, and an openai_api run sends its key "
+                               "to OpenAI: put the OpenAI key there (it was not sent)")
         errors = budget.check(cfg.get("budget"))
         if errors:
             raise BackendError("; ".join(errors))

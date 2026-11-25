@@ -405,6 +405,21 @@ def test_on_copies_the_report(on_copies):
     assert {"locked, fresh seed", "locked, on the network itself"} <= {r["what"] for r in rows}
 
 
+def test_the_openai_api_backend_alone_bills_the_openai_keys_variable():
+    """--backend openai_api without --auth and --api-key-env bills the key in CPL_OPENAI_KEY, so that such a run
+    never reads the Anthropic key's variable; what is given on the command line stands."""
+    from types import SimpleNamespace
+
+    args = lambda **kw: SimpleNamespace(**{**dict(run_id=None, runs_dir=None, sandbox=None, auth=None, backend=None, agent_model=None,
+                                                  effort=None, api_key_env=None, budget_usd=None, fake=None), **kw})
+    assert loop.run_overrides(args(backend="openai_api", agent_model="gpt-6.2-astra", run_id="g")) == {
+        "run_id": "g", "backend": "openai_api", "agent_model": "gpt-6.2-astra", "auth": "api_key", "api_key_env": "CPL_OPENAI_KEY"}
+    assert loop.run_overrides(args(backend="openai_api", api_key_env="CPL_OTHER_OPENAI_KEY"))["api_key_env"] == "CPL_OTHER_OPENAI_KEY"
+    assert "auth" not in loop.run_overrides(args(backend="claude_code")) and "auth" not in loop.run_overrides(args(backend="codex"))
+    cfg = run_config.load("config/pilot/rnn-g.yaml", loop.run_overrides(args(backend="openai_api", agent_model="gpt-6.2-astra", run_id="g")))
+    assert (cfg["backend"], cfg["auth"], cfg["api_key_env"], cfg["budget"]["run_usd"]) == ("openai_api", "api_key", "CPL_OPENAI_KEY", 60)
+
+
 def test_the_command_line_starts_resumes_and_finishes_a_run(tmp_path):
     """Through `main`, as a terminal does it: the flags of `run` are all read (a flag added to the wrong place once
     stopped every run before it began), a run is made, and `resume` and `finish` find it done."""

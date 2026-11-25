@@ -614,6 +614,25 @@ def rescore(path: Path, reward_cfg: dict, out=print) -> list:
     return rows
 
 
+OPENAI_KEY_ENV = "CPL_OPENAI_KEY"  # where an openai_api run started with --backend alone finds its key
+
+
+def run_overrides(args) -> dict:
+    """The config changes `run` makes from its flags. OpenAI's API is billed to a key only, so --backend openai_api
+    alone means --auth api_key --api-key-env CPL_OPENAI_KEY: the run never reads the Anthropic key's variable."""
+    over = {k: v for k, v in (("run_id", args.run_id), ("runs_dir", args.runs_dir), ("sandbox", args.sandbox),
+                              ("auth", args.auth), ("backend", args.backend), ("agent_model", args.agent_model),
+                              ("effort", args.effort), ("api_key_env", args.api_key_env)) if v}
+    if args.backend == "openai_api":
+        over.setdefault("auth", "api_key")
+        over.setdefault("api_key_env", OPENAI_KEY_ENV)
+    if args.budget_usd is not None:
+        over["budget"] = {"run_usd": args.budget_usd}
+    if args.fake:
+        over["backend"] = "fake"
+    return over
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -625,7 +644,8 @@ def main(argv=None) -> int:
     r.add_argument("--sandbox", help="auto, hardened, container, landlock, seatbelt or process (default: the config's)")
     r.add_argument("--auth", choices=("login", "api_key"), help="who pays for the rounds (default: the config's)")
     r.add_argument("--backend", choices=("claude_code", "codex", "openai_api"), help="who answers the rounds (default: the config's); "
-                   "with another backend give the run its own --run-id and --agent-model (docs/OPENAI.md)")
+                   "with another backend give the run its own --run-id and --agent-model (docs/OPENAI.md). openai_api "
+                   "bills the key in CPL_OPENAI_KEY unless --auth and --api-key-env say otherwise")
     r.add_argument("--agent-model", help="the model that answers (default: the config's)")
     r.add_argument("--effort", help="the model's reasoning effort (default: the config's)")
     r.add_argument("--api-key-env", help="api_key: the variable that holds the key (default: the config's)")
@@ -652,14 +672,7 @@ def main(argv=None) -> int:
 
     try:
         if args.cmd == "run":
-            over = {k: v for k, v in (("run_id", args.run_id), ("runs_dir", args.runs_dir), ("sandbox", args.sandbox),
-                                      ("auth", args.auth), ("backend", args.backend), ("agent_model", args.agent_model),
-                                      ("effort", args.effort), ("api_key_env", args.api_key_env)) if v}
-            if args.budget_usd is not None:
-                over["budget"] = {"run_usd": args.budget_usd}
-            if args.fake:
-                over["backend"] = "fake"
-            start(run_config.load(args.config, over), fake_scripts=args.fake)
+            start(run_config.load(args.config, run_overrides(args)), fake_scripts=args.fake)
             return 0
         if args.cmd == "resume":
             return 0 if drive(Path(args.run), fake_scripts=args.fake, accept_changes=args.accept_changes,

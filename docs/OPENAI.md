@@ -19,17 +19,19 @@ below, and read their records before anything longer.
 
 ## Through the API (`openai_api`)
 
+The key goes in `CPL_OPENAI_KEY`, never `OPENAI_API_KEY`, the same way as `CPL_ANTHROPIC_KEY` for
+a Claude run billed to a key. Then:
+
 ```bash
-export CPL_OPENAI_KEY=...            # the key, in this terminal only; never OPENAI_API_KEY
-python -m arcagent.loop run --config config/pilot/lin-a-openai-smoke.yaml
+python -m arcagent.loop run --config config/pilot/lin-a-openai-smoke.yaml --sandbox seatbelt
 ```
 
-Any other config runs the same way with the switches on the command line, under a run id of its
-own:
+Any other config runs the same way, under a run id of its own. `--backend openai_api` alone means
+`--auth api_key --api-key-env CPL_OPENAI_KEY`:
 
 ```bash
-python -m arcagent.loop run --config config/pilot/lin-b.yaml --backend openai_api --auth api_key \
-    --api-key-env CPL_OPENAI_KEY --agent-model gpt-6.2-astra --run-id pilot-lin-b-gpt --budget-usd 40
+python -m arcagent.loop run --config config/pilot/rnn-g.yaml --backend openai_api \
+    --agent-model gpt-6.2-astra --run-id pilot-rnn-g-gpt --sandbox seatbelt
 ```
 
 What happens (`arcagent/backends/openai_api.py`):
@@ -42,9 +44,11 @@ What happens (`arcagent/backends/openai_api.py`):
 - `effort` is sent as `reasoning.effort`. The API takes none, minimal, low, medium, high, xhigh and
   max; which of them a model supports is the model's.
 - The key is read from the variable `api_key_env` names. Its value goes into the request's
-  Authorization header and nowhere else: not into a file, a log or an error message. A name that
-  reads like an Anthropic key's variable is refused, so that no run sends one company's key to the
-  other. Before the first round the key is checked against the model list, which costs nothing.
+  Authorization header and nowhere else: not into a file, a log or an error message. No run sends
+  one company's key to the other: an OpenAI run refuses a variable named like an Anthropic key's and
+  a key that begins `sk-ant-`, and a Claude run refuses a variable named like an OpenAI key's and a
+  key that begins as OpenAI's do (`sk-proj-`, `sk-svcacct-`, `sk-admin-`). Before the first round
+  the key is checked against the model list, which costs nothing.
 
 ### The budget
 
@@ -53,11 +57,14 @@ What happens (`arcagent/backends/openai_api.py`):
 submitted, and the rounds end when the run's budget is spent. The difference is who counts. Claude
 Code reports what a session cost. Here the backend counts it, from the tokens every answer reports:
 
-    cost = input x p_in + cached x p_cached + output x p_out
+    cost = input x p_in + cached x p_cached + written x p_write + output x p_out
 
 per million tokens, at `openai.prices.<agent_model>` in `config/defaults.yaml`, with the
-long-context prices for a request over that line. The prices there are OpenAI's pricing page as of
-25 November 2026, for five models. Two consequences:
+long-context prices for a request over that line. "Written" is the input written to the prompt
+cache (`input_tokens_details.cache_write_tokens`): caching is on by default, and GPT-5.6 and later
+bill a write at 1.25 times the input price for the default 30-minute cache. The prices there are
+OpenAI's pricing page as read on 25 November 2026, for five models, the cache writes included
+(`tests/test_backend_openai.py` holds the page's numbers). Two consequences:
 
 - A model without an entry cannot be run through the API: add its prices first.
 - The count is this pipeline's, not the invoice. After the first run, compare `spend.jsonl` with

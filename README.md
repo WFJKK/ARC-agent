@@ -415,17 +415,22 @@ about 27 dollars for 5 rounds on `claude-fable-5-1`; this task is of the same si
 Two more backends, taken from Mech-Interp-Agent-level1 and described in [`docs/OPENAI.md`](docs/OPENAI.md). The
 prompt, the tools, the budgets of a session and everything measured are the same as under Claude Code.
 
-    python -m arcagent.loop run --config config/pilot/lin-a-codex-smoke.yaml     # the Codex CLI, under a ChatGPT login
     python -m arcagent.loop run --config config/pilot/lin-a-openai-smoke.yaml    # OpenAI's API, the key in CPL_OPENAI_KEY
+    python -m arcagent.loop run --config config/pilot/rnn-g.yaml --backend openai_api --agent-model gpt-6.2-astra --run-id pilot-rnn-g-gpt
+    python -m arcagent.loop run --config config/pilot/lin-a-codex-smoke.yaml     # the Codex CLI, under a ChatGPT login
     python -m arcagent.loop run --config config/pilot/att-a.yaml --backend codex --agent-model gpt-6.2-astra --run-id pilot-att-a-codex
 
 - `backend: codex` runs OpenAI's Codex CLI (`npm install -g @openai/codex`, then `codex login`) once per round, under
   your ChatGPT login only. Codex is a coding agent, so everything of its own that reads a file or the web is switched
   off, and before the first round the CLI is run against a stand-in on this machine to check that: a run starts only
   if the model would be given the session's two tools and nothing that reads a file or the web.
-- `backend: openai_api` talks to OpenAI's API itself, billed to the key in `CPL_OPENAI_KEY` (never `OPENAI_API_KEY`)
-  within the run's budget, which is counted here from the tokens the API reports at `openai.prices` in
-  `config/defaults.yaml`. Check those prices against OpenAI's pricing page before a run.
+- `backend: openai_api` talks to OpenAI's API itself, billed to the key in `CPL_OPENAI_KEY` (never `OPENAI_API_KEY`),
+  set the same way as `CPL_ANTHROPIC_KEY`; `--backend openai_api` alone means `--auth api_key --api-key-env
+  CPL_OPENAI_KEY`. The run's budget (60 dollars, 20 a round) is counted here from the tokens the API reports, at
+  `openai.prices` in `config/defaults.yaml`: OpenAI's pricing page as read on 25 November 2026, cache writes
+  included. Check them against that page before a run on another day.
+- Neither backend ever sends one company's key to the other: each refuses a variable named like the other's key
+  and a key that begins like the other's.
 
 Any pilot config runs under another backend with `--backend`, `--agent-model` and a `--run-id` of its own.
 

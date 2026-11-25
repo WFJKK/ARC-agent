@@ -126,6 +126,25 @@ def test_prices(tmp_path):
     assert price_of({}, p) == 0.0
 
 
+def test_the_configs_prices_are_openais_of_25_november_2026(tmp_path):
+    """Standard tier, dollars per million tokens, from OpenAI's pricing page as read on 25 November 2026; GPT-5.6 and
+    later bill a cache write at 1.25 times the input price (the default 30-minute cache), gpt-5.5 has none."""
+    prices = run_config.load("config/pilot/lin-a.yaml", {"runs_dir": str(tmp_path), **OVER})["openai"]["prices"]
+    page = {"gpt-6.2-astra": (8.00, 0.40, 40.00, 16.00, 0.80, 60.00), "gpt-6.2-sol": (2.00, 0.10, 10.00, 4.00, 0.20, 15.00),
+            "gpt-6.1-terra": (1.00, 0.05, 5.00, 2.00, 0.10, 7.50), "gpt-6-luna": (0.10, 0.01, 0.50, 0.20, 0.02, 0.75),
+            "gpt-5.5": (5.00, 0.50, 30.00, 10.00, 1.00, 45.00)}
+    for model, (i, c, o, li, lc, lo) in page.items():
+        p, long = prices[model], prices[model]["long_context"]
+        assert (p["input"], p["cached_input"], p["output"]) == (i, c, o) and long["above_input_tokens"] == 272000
+        assert (long["input"], long["cached_input"], long["output"]) == (li, lc, lo)
+        if model == "gpt-5.5":
+            assert "cache_write" not in p and "cache_write" not in long
+        else:
+            assert p["cache_write"] == pytest.approx(1.25 * i) and long["cache_write"] == pytest.approx(1.25 * li)
+    # an answer that wrote 500 of its 1,000 input tokens to the cache, on gpt-6.2-astra: the writes at $10, not $8
+    assert price_of(usage(1000, 0, 100, written=500), prices["gpt-6.2-astra"]) == pytest.approx((500 * 8 + 500 * 10 + 100 * 40) / 1e6)
+
+
 def test_a_session_at_its_spending_cap_keeps_what_it_did(tmp_path):
     cfg, session, where = setup(tmp_path, budget={"run_usd": 0.02, "round_usd": 0.01})
     costly = answer(call("run_python", {"code": "print(1)"}), usage=usage(4000, 0, 400))   # $0.012 at 2 and 10 a million
@@ -217,6 +236,11 @@ def test_the_config_says_who_pays_and_at_what_price(tmp_path):
         OpenAIBackend(cfg, environ={"OPENAI_API_KEY": "sk-not-this-one"}, transport=StandIn([]))
     with pytest.raises(BackendError, match="reads like an Anthropic key"):
         OpenAIBackend({**cfg, "api_key_env": "CPL_ANTHROPIC_KEY"}, environ={"CPL_ANTHROPIC_KEY": "sk-ant"}, transport=StandIn([]))
+    # an Anthropic key put in the OpenAI key's variable is not sent to OpenAI: refused before any request
+    t = StandIn([])
+    with pytest.raises(BackendError, match="starts like an Anthropic key") as caught:
+        OpenAIBackend(cfg, environ={"CPL_OPENAI_KEY": "sk-ant-api03-not-for-openai"}, transport=t)
+    assert "not-for-openai" not in str(caught.value) and not t.gets and not t.posts
     with pytest.raises(BackendError, match="refused the key"):
         OpenAIBackend(cfg, environ={"CPL_OPENAI_KEY": KEY}, transport=StandIn([], get=(401, "no")))
     with pytest.raises(BackendError, match="cannot use the model"):

@@ -260,6 +260,13 @@ def test_api_key_mode_needs_its_variable(tmp_path):
     with pytest.raises(BackendError, match="line breaks") as caught:
         backend(cfg, [[]], environ={**ENV, "CPL_ANTHROPIC_KEY": KEY + "\r"})  # a key file with Windows line endings
     assert KEY not in str(caught.value)
+    # an OpenAI key is not sent to Anthropic: by its variable's name, and by how the key itself begins
+    with pytest.raises(BackendError, match="reads like an OpenAI key's variable"):
+        ClaudeCodeBackend({**cfg, "api_key_env": "CPL_OPENAI_KEY"}, runner=lambda *a: None, environ={**ENV, "CPL_OPENAI_KEY": "sk-proj-x"})
+    for openai_key in ("sk-proj-abc123", "sk-svcacct-abc123"):
+        with pytest.raises(BackendError, match="starts like an OpenAI key") as caught:
+            backend(cfg, [[]], environ={**ENV, "CPL_ANTHROPIC_KEY": openai_key})
+        assert "abc123" not in str(caught.value)
     with pytest.raises(run_config.ConfigError, match="api_key_env must name"):
         billed(tmp_path, api_key_env="ANTHROPIC_API_KEY")
     with pytest.raises(run_config.ConfigError, match="budget.run_usd must be a positive"):
