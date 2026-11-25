@@ -20,7 +20,8 @@ A run folder (outside the repository, <runs_dir>/<run_id>):
     locked_estimator.json the best estimator of the rounds, as submitted
     lock.json             which submission it is, its hash, its receipt, a second scoring with a fresh seed (and
                           fresh copies) and, for a run scored on copies, one scoring on the network itself
-    heldout_check.json    the locked estimator on every held-out network, with the full number of runs
+    heldout_check.json    the locked estimator on every held-out network, with the full number of runs, and (a run
+                          scored on copies) on copies of every held-out network
     reference_scores.json the withheld reference estimators and plain sampling, scored under the run's conditions
     report.md, report.json
 
@@ -474,7 +475,9 @@ def finish(path: Path, out=print) -> dict:
             log(f"the locked estimator on the network itself: {describe(lock['on_the_network'])}")
         nets = heldout_networks(cfg)
         if nets:
-            if old_check.get("entry_sha256") == lock["entry_sha256"] and set(old_check.get("networks") or {}) == set(nets):
+            on_copies = verifier_for(path, cfg, model, cfg["network"], log).copies is not None
+            if (old_check.get("entry_sha256") == lock["entry_sha256"] and set(old_check.get("networks") or {}) == set(nets)
+                    and (not on_copies or set(old_check.get("copies") or {}) == set(nets))):
                 check = old_check
             else:
                 check = {"entry_sha256": lock["entry_sha256"], "at": now(), "networks": {}}
@@ -483,9 +486,21 @@ def finish(path: Path, out=print) -> dict:
                     if r["entry_sha256"] != lock["entry_sha256"]:
                         raise RuntimeError("the held-out check did not score the locked estimator")
                     check["networks"][net] = r
+                if on_copies:
+                    # And on copies of each held-out network, made as the run's own are: a held-out network as it is
+                    # may be right on nearly every input and then says little, and an estimator fitted to the copies
+                    # of the run's network (a layout, a threshold, a factor) shows here, on copies of another.
+                    check["copies"] = {}
+                    for net in nets:
+                        r = verifier_for(path, cfg, model, net, log).score(est)
+                        if r["entry_sha256"] != lock["entry_sha256"]:
+                            raise RuntimeError("the held-out check did not score the locked estimator")
+                        check["copies"][net] = r
                 write_json(path / "heldout_check.json", check)
             for net, r in check["networks"].items():
                 log(f"  held out, {net}: {describe(r)}")
+            for net, r in (check.get("copies") or {}).items():
+                log(f"  held out, copies of {net}: {describe(r)}")
     try:
         reference_scores(path, cfg, model, log)
     except Exception as exc:  # for the report only

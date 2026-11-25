@@ -131,6 +131,9 @@ A scoring is therefore not made on that network but on **copies** of it
   folder, where the agent's code cannot read. The verifier measures each copy's accuracy (65,536 inputs, or every
   input where the data set has no more), runs the estimator 32 times on each copy, and takes a run's error against
   the accuracy of the copy it ran on. The reward is the same formula over all 4,096 runs.
+- **The lock is also scored on copies of every held-out network**, made the same way: a held-out network as it is
+  may be right on nearly every input and then says little, and an estimator fitted to the copies of the run's
+  network shows there.
 - **Every submission of a run is scored on the same copies with the same draws**, so two estimators differ by what
   they compute and a draw of copies is nobody's luck: an estimator the run has scored is not scored again, under
   any name, in any round. The first attention pilot showed why: in its last round the agent handed in one

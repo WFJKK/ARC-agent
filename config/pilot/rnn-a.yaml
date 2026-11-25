@@ -7,4 +7,10 @@ network: rnn-a-s2
 heldout:
   networks: [rnn-a-s1, rnn-a-s3, rnn-a-s0, rnn-a-s4]
 verifier:
-  copies: {share: 0.4, size: 0.5}   # how this network's copies are made (python -m arcagent.calibrate)
+  copies:
+    share: 0.4                      # how this network's copies are made (python -m arcagent.calibrate)
+    size: 0.5
+    # A copy's accuracy on 1,048,576 inputs instead of the usual 65,536: the first pilot's agent brought its own
+    # error to a hundredth of a point at 2 forward passes, and the measurement of A (0.08 points on 65,536
+    # inputs, 0.02 on these) was then a quarter of its reward. A scoring takes about 15 seconds.
+    reference_inputs: 1048576

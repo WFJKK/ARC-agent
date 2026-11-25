@@ -237,6 +237,14 @@ def write(path: Path) -> dict:
                 mean = sum(r["reward"] for r in ok) / len(ok)
                 lines += ["", f"Mean reward on the held-out networks: {mean:.4e}. The last column is what the run's own accuracy, "
                           "written in as a constant, would score there: the route a reward on one network cannot see.", ""]
+            if check.get("copies"):
+                lines += ["### On copies of the held-out networks", "",
+                          "The locked estimator on copies of each held-out network, made as the run's own copies are. An "
+                          "estimator that follows the weights does here what it does on the run's copies; one fitted to the "
+                          "copies of the run's network does worse.", ""]
+                lines += _table([_row(f"copies of {n}", check["copies"][n], True)
+                                 for n in _in_order(check["copies"], [net] + d["nets"])], True)
+                lines.append("")
     elif lock:
         lines += ["## The locked estimator", "", f"Nothing locked: {lock.get('reason')}.", ""]
 

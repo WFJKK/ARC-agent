@@ -313,6 +313,12 @@ def test_on_copies_the_heldout_networks_are_scored_as_they_are(on_copies):
         assert by[("pasted", net)]["parts"]["bias"] == pytest.approx(refs["rnn-b-s0"]["accuracy"] - refs[net]["accuracy"], abs=0.01)
     check = read_json(path / "heldout_check.json")
     assert all(r["scored_on"] == "network" and r["runs"] == 256 for r in check["networks"].values())
+    # and on copies of each held-out network: the locked sampler does there what it does on the run's copies
+    lock, text = read_json(path / "lock.json"), (path / "report.md").read_text()
+    assert set(check["copies"]) == set(check["networks"]) and "### On copies of the held-out networks" in text
+    for net, r in check["copies"].items():
+        assert r["scored_on"] == "copies" and r["network"] == net and r["parts"]["copies"] == 32 and f"| copies of {net} |" in text
+        assert r["seed"] not in (lock["seed"], lock["measured_again"]["seed"]) and r["parts"]["tracking"] > 0.8
 
 
 def test_on_copies_the_report(on_copies):
