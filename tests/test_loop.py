@@ -345,3 +345,20 @@ def test_on_copies_the_report(on_copies):
     assert (path / "report.md").read_text() == text
     rows = loop.rescore(path, {"name": "r_lambda", "lam": 0.0}, out=lambda *_: None)
     assert {"locked, fresh seed", "locked, on the network itself"} <= {r["what"] for r in rows}
+
+
+def test_the_command_line_starts_resumes_and_finishes_a_run(tmp_path):
+    """Through `main`, as a terminal does it: the flags of `run` are all read (a flag added to the wrong place once
+    stopped every run before it began), a run is made, and `resume` and `finish` find it done."""
+    said = lambda *a, **k: None
+    args = ["run", "--config", "config/pilot/rnn-b-smoke.yaml", "--runs-dir", str(tmp_path), "--run-id", "by-hand",
+            "--fake", "tests/fake_copies", "--sandbox", "process", "--agent-model", "some-model", "--effort", "low"]
+    assert loop.main(args) == 0
+    path = tmp_path / "by-hand"
+    cfg = read_json(path / "run.json")["config"]
+    assert (cfg["backend"], cfg["agent_model"], cfg["effort"], cfg["sandbox"]) == ("fake", "some-model", "low", "process")
+    assert read_json(path / "lock.json")["locked"] and (path / "report.md").is_file()
+    assert loop.main(["resume", "--run", str(path), "--fake", "tests/fake_copies"]) == 0
+    assert loop.main(["finish", "--run", str(path)]) == 0
+    with pytest.raises(SystemExit):
+        loop.main(["run", "--config", "config/pilot/rnn-b-smoke.yaml", "--backend", "no-such-backend"])

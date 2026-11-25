@@ -548,6 +548,11 @@ def main(argv=None) -> int:
     r.add_argument("--fake", help="a folder of scripted rounds: sets the backend to fake")
     r.add_argument("--sandbox", help="auto, hardened, container, landlock, seatbelt or process (default: the config's)")
     r.add_argument("--auth", choices=("login", "api_key"), help="who pays for the rounds (default: the config's)")
+    r.add_argument("--backend", choices=("claude_code", "codex", "openai_api"), help="who answers the rounds (default: the config's); "
+                   "with another backend give the run its own --run-id and --agent-model (docs/OPENAI.md)")
+    r.add_argument("--agent-model", help="the model that answers (default: the config's)")
+    r.add_argument("--effort", help="the model's reasoning effort (default: the config's)")
+    r.add_argument("--api-key-env", help="api_key: the variable that holds the key (default: the config's)")
     r.add_argument("--budget-usd", type=float, help="api_key: what the whole run may spend, in dollars (default: the config's)")
     s = sub.add_parser("resume")
     s.add_argument("--run", required=True)
@@ -592,8 +597,3 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-    r.add_argument("--backend", choices=("claude_code", "codex", "openai_api"), help="who answers the rounds (default: the config's); "
-                   "with another backend give the run its own --run-id and --agent-model (docs/OPENAI.md)")
-    r.add_argument("--agent-model", help="the model that answers (default: the config's)")
-    r.add_argument("--effort", help="the model's reasoning effort (default: the config's)")
-    r.add_argument("--api-key-env", help="api_key: the variable that holds the key (default: the config's)")
