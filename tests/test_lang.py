@@ -278,6 +278,24 @@ def test_an_estimate_is_one_finite_number(toy):
     assert list(r["estimates"]) == [0.0, 0.0, 0.0]
 
 
+def test_a_boolean_in_arithmetic_counts_as_0_or_1_and_leaves_the_other_number_as_it_is():
+    """It used to turn the other number into a whole number as well: (x > 0) * 2.5 was 2."""
+    g = Graph({"a": np.array([1.5, -2.5], dtype=np.float32), "m": np.array([[0.5, 1.5], [2.5, -0.5]], dtype=np.float32)})
+    a, m = g.weight("a"), g.weight("m")
+    on = a > 0                                                       # [True, False]
+    for value, want in (
+            (on * a, [1.5, 0.0]), (a * on, [1.5, 0.0]), (on * 2.5, [2.5, 0.0]), (on + 0.25, [1.25, 0.25]),
+            (a - on, [0.5, -2.5]), (a / (on + on), None), (on * g.const([2.5, 3.5]), [2.5, 0.0]),
+            (on @ m, [0.5, 1.5]), (m @ on, [0.5, 2.5]), (lang.where(on, a, 0.0), [1.5, 0.0])):
+        if want is not None:
+            assert value.value.dtype == np.float64 and value.value.tolist() == want
+    # among themselves and with whole numbers, booleans stay whole numbers
+    for value, want in ((on + on, [2, 0]), (on * g.arange(2), [0, 0]), (on * 3, [3, 0]), (on @ on, 1)):
+        assert value.value.dtype == np.int64 and value.value.tolist() == want
+    r = lang.run_estimator(g.entry((on * a).sum()), {"a": np.array([1.5, -2.5], dtype=np.float32), "m": np.zeros((2, 2), np.float32)}, 1, 0)
+    assert r["estimates"][0] == 1.5 and r["ops"][0] == 5              # the price is what it was: >, *, and a sum of two
+
+
 def test_refused_structures(toy):
     g = Graph(toy)
     good = g.entry(g.const(0.5))

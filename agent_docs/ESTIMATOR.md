@@ -28,7 +28,8 @@ so `x.shape` and `x.value` exist and a wrong shape fails at the line that makes 
 `lang.Graph.load(e, weights, info["data_set"], info["input_space"])` opens a saved estimator again and
 returns `(graph, estimate)`. `lang.show(e)` prints an estimator one node per line.
 
-Values are whole numbers, floats or booleans (64 bits). There are no loops and no Python `if` on
+Values are whole numbers, floats or booleans (64 bits). In arithmetic a boolean counts as 0 or 1, so
+`(x > 0) * x` is x where it is positive and 0 elsewhere. There are no loops and no Python `if` on
 expressions: use `lang.where(c, x, y)` (both sides are computed) or `lang.cond(c, x, y)` (c is one
 boolean, and only the chosen side is computed and charged). A Python loop that builds nodes is fine:
 it runs while you write the estimator, and every node it makes is counted.

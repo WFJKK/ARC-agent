@@ -109,6 +109,11 @@ def _norm(v) -> np.ndarray:
     raise EntryError(f"values are integers, floats or booleans, not {a.dtype}")
 
 
+def _counted(v: np.ndarray) -> np.ndarray:
+    """A boolean in arithmetic counts as 0 or 1; any other value is left as it is."""
+    return v.astype(np.int64) if v.dtype == np.bool_ else v
+
+
 def _guard(n: int) -> None:
     if n > MAX_ELEMENTS:
         raise EntryError(f"a value with {n} entries is above the limit of {MAX_ELEMENTS}")
@@ -206,8 +211,8 @@ def apply(node: dict, args: list, weights: dict, rng=None, svd_store: dict | Non
         _guard(size)
         if op in ("and", "or") and not (x.dtype == np.bool_ and y.dtype == np.bool_):
             raise EntryError(f"{op}: needs booleans")
-        if op in ("add", "sub", "mul", "div", "floordiv", "mod") and (x.dtype == np.bool_ or y.dtype == np.bool_):
-            x, y = x.astype(np.int64), y.astype(np.int64)
+        if op in ("add", "sub", "mul", "div", "floordiv", "mod"):
+            x, y = _counted(x), _counted(y)
         if op == "power":  # in floats: a whole number to a negative power is a fraction
             x, y = x.astype(np.float64), y.astype(np.float64)
         return _norm(ELEMENTWISE_2[op](x, y)), size
@@ -240,9 +245,7 @@ def apply(node: dict, args: list, weights: dict, rng=None, svd_store: dict | Non
         _guard(size)
         if size * max(k, 1) > MAX_WORK:
             raise EntryError(f"matmul: {size * k} multiply-adds are above the limit of {MAX_WORK} for one product")
-        if x.dtype == np.bool_ or y.dtype == np.bool_:
-            x, y = x.astype(np.int64), y.astype(np.int64)
-        return _norm(np.matmul(x, y)), size * k
+        return _norm(np.matmul(_counted(x), _counted(y))), size * k
     if op in REDUCE:
         (x,) = args
         ax = node.get("axis")
